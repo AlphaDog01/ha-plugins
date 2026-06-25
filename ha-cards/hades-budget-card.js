@@ -10,7 +10,70 @@
  */
 
 const BUDGET_API = 'https://nexus.cnyhades.com/api/budget';
-const HEADERS    = { 'X-API-Key': 'ca2c09b29ff8fbc900edb55f368073ec384882f80c854967a7e2656a3ea3f25b' };
+
+// ── Vault token cache ─────────────────────────────────────────────────────────
+let _vaultToken = null;
+let _vaultExpiry = 0;
+
+async function getHeaders(hass) {
+  const now = Date.now();
+  if (_vaultToken && now < _vaultExpiry) {
+    return { 'X-API-Key': _vaultToken };
+  }
+
+  // Read vault config from ha-household config entry stored in HA states
+  // Falls back to checking window._hadesVaultConfig set manually if needed
+  let vaultUrl    = '';
+  let clientId    = '';
+  let clientSecret = '';
+  let secretName  = 'budget-api';
+
+  // Try to get from hass states attribute set by ha-household sensor
+  if (hass && hass.states) {
+    const sensor = Object.values(hass.states).find(
+      s => s.entity_id && s.entity_id.startsWith('sensor.hades_household_') &&
+           s.attributes && s.attributes.vault_url
+    );
+    if (sensor) {
+      vaultUrl     = sensor.attributes.vault_url     || '';
+      clientId     = sensor.attributes.vault_client_id || '';
+      clientSecret = sensor.attributes.vault_client_secret || '';
+      secretName   = sensor.attributes.vault_secret_budget || 'budget-api';
+    }
+  }
+
+  // Fallback: window._hadesVaultConfig set manually in browser console
+  if (!vaultUrl && window._hadesVaultConfig) {
+    vaultUrl     = window._hadesVaultConfig.vault_url     || '';
+    clientId     = window._hadesVaultConfig.client_id     || '';
+    clientSecret = window._hadesVaultConfig.client_secret || '';
+    secretName   = window._hadesVaultConfig.secret_name   || 'budget-api';
+  }
+
+  if (!vaultUrl || !clientId || !clientSecret) {
+    console.warn('[hades-budget-card] Vault not configured.');
+    return {};
+  }
+
+  try {
+    const r = await fetch(`${vaultUrl}/vault/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, secret_name: secretName }),
+    });
+    if (!r.ok) throw new Error('Vault ' + r.status);
+    const d = await r.json();
+    const token = d.value || d.token || d.secret || '';
+    if (token) {
+      _vaultToken  = token;
+      _vaultExpiry = now + 55000;
+    }
+    return token ? { 'X-API-Key': token } : {};
+  } catch (e) {
+    console.error('[hades-budget-card] Vault error:', e);
+    return {};
+  }
+}
 
 function fmt(n) {
   if (n == null) return '—';
@@ -270,12 +333,12 @@ function renderFooter(d) {
 // CARD 1 — hades-budget-card (TV)
 // ══════════════════════════════════════════════════════════════════════════════
 class HadesBudgetCard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._data=null;this._loading=true;this._error=null;this._initialized=false;}
+  constructor(){super();this.attachShadow({mode:'open'});this._data=null;this._loading=true;this._error=null;this._initialized=false;this._hass=null;}
   setConfig(c){this._config=c;}
-  set hass(h){if(!this._initialized){this._initialized=true;this._render();this._load();}}
+  set hass(h){this._hass=h;if(!this._initialized){this._initialized=true;this._render();this._load();}}
   async _load(){
     try{
-      const r1=await fetch(`${BUDGET_API}/v1/months`,{headers:HEADERS});
+      const HEADERS=await getHeaders(this._hass);const r1=await fetch(`${BUDGET_API}/v1/months`,{headers:HEADERS});
       const j1=await r1.json(); const months=j1.months||[];
       if(!months.length){this._error='No budget data';this._loading=false;this._render();return;}
       const now=new Date();
@@ -304,12 +367,12 @@ class HadesBudgetCard extends HTMLElement {
 // CARD 2 — hades-budget-all-card (Desktop)
 // ══════════════════════════════════════════════════════════════════════════════
 class HadesBudgetAllCard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._months=[];this._activeId=null;this._monthData=null;this._loading=true;this._error=null;this._initialized=false;}
+  constructor(){super();this.attachShadow({mode:'open'});this._months=[];this._activeId=null;this._monthData=null;this._loading=true;this._error=null;this._initialized=false;this._hass=null;}
   setConfig(c){this._config=c;}
-  set hass(h){if(!this._initialized){this._initialized=true;this._render();this._loadMonths();}}
+  set hass(h){this._hass=h;if(!this._initialized){this._initialized=true;this._render();this._loadMonths();}}
   async _loadMonths(){
     try{
-      const r=await fetch(`${BUDGET_API}/v1/months`,{headers:HEADERS});
+      const HEADERS=await getHeaders(this._hass);const r=await fetch(`${BUDGET_API}/v1/months`,{headers:HEADERS});
       const j=await r.json(); this._months=j.months||[];
       if(this._months.length){this._activeId=this._months[0].id;await this._loadMonth(this._activeId);}
       else{this._loading=false;this._render();}
@@ -318,7 +381,7 @@ class HadesBudgetAllCard extends HTMLElement {
   async _loadMonth(id){
     this._loading=true;this._render();
     try{
-      const r=await fetch(`${BUDGET_API}/v1/month/${id}`,{headers:HEADERS});
+      const HEADERS=await getHeaders(this._hass);const r=await fetch(`${BUDGET_API}/v1/month/${id}`,{headers:HEADERS});
       this._monthData=await r.json(); this._loading=false; this._render();
     }catch(e){this._error='Failed to load month';this._loading=false;this._render();}
   }
@@ -351,11 +414,11 @@ class HadesBudgetAllCard extends HTMLElement {
 // CARD 3 — hades-budget-week-card (Compact week)
 // ══════════════════════════════════════════════════════════════════════════════
 class HadesBudgetWeekCard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._week=null;this._loading=true;this._error=null;this._initialized=false;}
+  constructor(){super();this.attachShadow({mode:'open'});this._week=null;this._loading=true;this._error=null;this._initialized=false;this._hass=null;}
   setConfig(c){this._config=c;}
-  set hass(h){if(!this._initialized){this._initialized=true;this._render();this._loadWeek();}}
+  set hass(h){this._hass=h;if(!this._initialized){this._initialized=true;this._render();this._loadWeek();}}
   async _loadWeek(){
-    try{const r=await fetch(`${BUDGET_API}/v1/week/current`,{headers:HEADERS});this._week=await r.json();this._loading=false;this._render();}
+    try{const HEADERS=await getHeaders(this._hass);const r=await fetch(`${BUDGET_API}/v1/week/current`,{headers:HEADERS});this._week=await r.json();this._loading=false;this._render();}
     catch(e){this._error='Failed to load week';this._loading=false;this._render();}
   }
   _render(){
@@ -424,12 +487,12 @@ class HadesBudgetWeekCard extends HTMLElement {
 // CARD 4 — hades-budget-mobile-card (Mobile)
 // ══════════════════════════════════════════════════════════════════════════════
 class HadesBudgetMobileCard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._data=null;this._loading=true;this._error=null;this._initialized=false;}
+  constructor(){super();this.attachShadow({mode:'open'});this._data=null;this._loading=true;this._error=null;this._initialized=false;this._hass=null;}
   setConfig(c){this._config=c;}
-  set hass(h){if(!this._initialized){this._initialized=true;this._render();this._load();}}
+  set hass(h){this._hass=h;if(!this._initialized){this._initialized=true;this._render();this._load();}}
   async _load(){
     try{
-      const r1=await fetch(`${BUDGET_API}/v1/months`,{headers:HEADERS});
+      const HEADERS=await getHeaders(this._hass);const r1=await fetch(`${BUDGET_API}/v1/months`,{headers:HEADERS});
       const j1=await r1.json(); const months=j1.months||[];
       if(!months.length){this._error='No budget data';this._loading=false;this._render();return;}
       const now=new Date();
