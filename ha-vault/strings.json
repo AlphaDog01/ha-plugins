@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hades Vault — Token Broker",
+        "description": "Connect to your Hades Vault instance. The client ID and secret are created in the Hades Vault admin UI.",
+        "data": {
+          "vault_url":     "Vault URL",
+          "client_id":     "Client ID",
+          "client_secret": "Client Secret"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach Hades Vault at that URL",
+      "unknown":        "Unexpected error — check logs"
+    },
+    "abort": {
+      "already_configured": "Hades Vault is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update Vault Credentials",
+        "description": "Current client ID: {current_id}. Leave client secret blank to keep existing.",
+        "data": {
+          "vault_url":     "Vault URL",
+          "client_id":     "Client ID",
+          "client_secret": "Client Secret (leave blank to keep existing)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach Hades Vault at that URL",
+      "unknown":        "Unexpected error — check logs"
+    }
+  }
+}
