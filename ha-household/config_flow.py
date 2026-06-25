@@ -36,6 +36,7 @@ from .const import (
     CONF_VAULT_SECRET_CHORES,
     CONF_VAULT_SECRET_BUDGET,
 )
+from .vault import load_vault_env, save_vault_secret
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -111,15 +112,17 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error connecting to Hades API")
                 errors["base"] = "unknown"
 
+        # Pre-fill from /config/.hades_vault if it exists
+        env = load_vault_env()
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required(CONF_CHORES_HOST,          default="http://10.72.16.21:33911"): str,
-                vol.Optional(CONF_VAULT_URL,            default="http://10.72.16.21:33167"): str,
-                vol.Optional(CONF_VAULT_CLIENT_ID,      default=""): str,
+                vol.Optional(CONF_VAULT_URL,            default=env.get("VAULT_URL", "http://10.72.16.21:33167")): str,
+                vol.Optional(CONF_VAULT_CLIENT_ID,      default=env.get("VAULT_CLIENT_ID", "")): str,
                 vol.Optional(CONF_VAULT_CLIENT_SECRET,  default=""): str,
-                vol.Optional(CONF_VAULT_SECRET_CHORES,  default="chores-api"): str,
-                vol.Optional(CONF_VAULT_SECRET_BUDGET,  default="budget-api"): str,
+                vol.Optional(CONF_VAULT_SECRET_CHORES,  default=env.get("VAULT_SECRET_CHORES", "chores-api")): str,
+                vol.Optional(CONF_VAULT_SECRET_BUDGET,  default=env.get("VAULT_SECRET_BUDGET", "budget-api")): str,
                 vol.Optional(CONF_CHORES_API_KEY,       default=""): str,
                 vol.Optional(CONF_MEAL_HOST,            default="http://10.72.16.57:3000"): str,
             }),
@@ -460,35 +463,44 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_update_vault(self, user_input=None) -> FlowResult:
-        """Update Vault credentials."""
+        """Update Vault credentials. Client ID is read-only — set by install.sh."""
         errors: dict = {}
+        env = load_vault_env()
         data = self._entry.data
 
+        # Client ID always comes from env file — never editable from UI
+        locked_client_id = env.get("VAULT_CLIENT_ID") or data.get(CONF_VAULT_CLIENT_ID, "")
+
         if user_input is not None:
-            new_data = {
-                **data,
-                CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
-                CONF_VAULT_CLIENT_ID:     user_input.get(CONF_VAULT_CLIENT_ID, "").strip(),
-                CONF_VAULT_SECRET_CHORES: user_input.get(CONF_VAULT_SECRET_CHORES, "chores-api").strip(),
-                CONF_VAULT_SECRET_BUDGET: user_input.get(CONF_VAULT_SECRET_BUDGET, "budget-api").strip(),
-            }
-            # Only update secret if a new one was entered
             new_secret = user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip()
             if new_secret:
-                new_data[CONF_VAULT_CLIENT_SECRET] = new_secret
-            self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+                # Write new secret back to /config/.hades_vault
+                save_vault_secret(new_secret)
+                # Also update config entry so it's in sync
+                self.hass.config_entries.async_update_entry(
+                    self._entry,
+                    data={
+                        **data,
+                        CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
+                        CONF_VAULT_SECRET_CHORES: user_input.get(CONF_VAULT_SECRET_CHORES, "chores-api").strip(),
+                        CONF_VAULT_SECRET_BUDGET: user_input.get(CONF_VAULT_SECRET_BUDGET, "budget-api").strip(),
+                        CONF_VAULT_CLIENT_SECRET: new_secret,
+                    },
+                )
             return self.async_create_entry(title="", data={**self._entry.options})
 
         return self.async_show_form(
             step_id="update_vault",
             data_schema=vol.Schema({
-                vol.Optional(CONF_VAULT_URL,           default=data.get(CONF_VAULT_URL, "http://10.72.16.21:33167")): str,
-                vol.Optional(CONF_VAULT_CLIENT_ID,     default=data.get(CONF_VAULT_CLIENT_ID, "")): str,
-                vol.Optional(CONF_VAULT_CLIENT_SECRET, default=""): str,  # never pre-fill secret
-                vol.Optional(CONF_VAULT_SECRET_CHORES, default=data.get(CONF_VAULT_SECRET_CHORES, "chores-api")): str,
-                vol.Optional(CONF_VAULT_SECRET_BUDGET, default=data.get(CONF_VAULT_SECRET_BUDGET, "budget-api")): str,
+                vol.Optional(CONF_VAULT_URL,           default=env.get("VAULT_URL") or data.get(CONF_VAULT_URL, "http://10.72.16.21:33167")): str,
+                vol.Optional(CONF_VAULT_CLIENT_SECRET, default=""): str,  # never pre-fill
+                vol.Optional(CONF_VAULT_SECRET_CHORES, default=env.get("VAULT_SECRET_CHORES") or data.get(CONF_VAULT_SECRET_CHORES, "chores-api")): str,
+                vol.Optional(CONF_VAULT_SECRET_BUDGET, default=env.get("VAULT_SECRET_BUDGET") or data.get(CONF_VAULT_SECRET_BUDGET, "budget-api")): str,
             }),
             errors=errors,
+            description_placeholders={
+                "client_id": locked_client_id or "not set — run install.sh first",
+            },
         )
 
     def _save(self, tracked: list | None = None) -> FlowResult:
