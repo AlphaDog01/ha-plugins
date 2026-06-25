@@ -30,13 +30,24 @@ from .const import (
     CALENDAR_TYPE_ICAL,
     CALENDAR_TYPE_CALDAV,
     CALENDAR_COLORS,
+    CONF_VAULT_URL,
+    CONF_VAULT_CLIENT_ID,
+    CONF_VAULT_CLIENT_SECRET,
+    CONF_VAULT_SECRET_CHORES,
+    CONF_VAULT_SECRET_BUDGET,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _fetch_people(hass, host: str, api_key: str) -> list[dict]:
+async def _fetch_people(hass, host: str, entry_data: dict) -> list[dict]:
     """Fetch people list from the Hades API."""
+    from .vault import resolve_api_key
+    api_key = await resolve_api_key(
+        hass, entry_data,
+        entry_data.get(CONF_VAULT_SECRET_CHORES, ""),
+        entry_data.get(CONF_CHORES_API_KEY, ""),
+    )
     session = async_get_clientsession(hass)
     headers = {}
     if api_key:
@@ -72,13 +83,21 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             meal_host = user_input.get(CONF_MEAL_HOST, "").strip()
 
             try:
-                people = await _fetch_people(self.hass, host, api_key)
+                entry_data = {
+                    CONF_CHORES_HOST:         host,
+                    CONF_CHORES_API_KEY:      api_key,
+                    CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
+                    CONF_VAULT_CLIENT_ID:     user_input.get(CONF_VAULT_CLIENT_ID, "").strip(),
+                    CONF_VAULT_CLIENT_SECRET: user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip(),
+                    CONF_VAULT_SECRET_CHORES: user_input.get(CONF_VAULT_SECRET_CHORES, "chores-api").strip(),
+                    CONF_VAULT_SECRET_BUDGET: user_input.get(CONF_VAULT_SECRET_BUDGET, "budget-api").strip(),
+                }
+                people = await _fetch_people(self.hass, host, entry_data)
                 if not people:
                     errors["base"] = "cannot_connect"
                 else:
-                    self._data[CONF_CHORES_HOST]  = host
-                    self._data[CONF_CHORES_API_KEY] = api_key
-                    self._data[CONF_MEAL_HOST]     = meal_host
+                    self._data.update(entry_data)
+                    self._data[CONF_MEAL_HOST] = meal_host
                     self._people = people
                     return await self.async_step_people()
             except aiohttp.ClientConnectorError:
@@ -95,9 +114,14 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_CHORES_HOST, default="http://10.72.16.21:33911"): str,
-                vol.Optional(CONF_CHORES_API_KEY, default=""): str,
-                vol.Optional(CONF_MEAL_HOST, default="http://10.72.16.57:3000"): str,
+                vol.Required(CONF_CHORES_HOST,          default="http://10.72.16.21:33911"): str,
+                vol.Optional(CONF_VAULT_URL,            default="http://10.72.16.21:33167"): str,
+                vol.Optional(CONF_VAULT_CLIENT_ID,      default=""): str,
+                vol.Optional(CONF_VAULT_CLIENT_SECRET,  default=""): str,
+                vol.Optional(CONF_VAULT_SECRET_CHORES,  default="chores-api"): str,
+                vol.Optional(CONF_VAULT_SECRET_BUDGET,  default="budget-api"): str,
+                vol.Optional(CONF_CHORES_API_KEY,       default=""): str,
+                vol.Optional(CONF_MEAL_HOST,            default="http://10.72.16.57:3000"): str,
             }),
             errors=errors,
         )
@@ -202,6 +226,7 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                 "remove_calendar": "Remove a calendar",
                 "update_people":   "Update tracked people",
                 "update_meal_host": "Update Meal Planner URL",
+                "update_vault":    "Update Vault Credentials",
             },
         )
 
@@ -406,7 +431,7 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                 self._people_fetched = await _fetch_people(
                     self.hass,
                     data[CONF_CHORES_HOST],
-                    data.get(CONF_CHORES_API_KEY, ""),
+                    data,
                 )
             except Exception:
                 errors["base"] = "cannot_connect"
@@ -430,6 +455,38 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                 vol.Required(CONF_TRACKED_PEOPLE, default=current): cv.multi_select(
                     people_options
                 ),
+            }),
+            errors=errors,
+        )
+
+    async def async_step_update_vault(self, user_input=None) -> FlowResult:
+        """Update Vault credentials."""
+        errors: dict = {}
+        data = self._entry.data
+
+        if user_input is not None:
+            new_data = {
+                **data,
+                CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
+                CONF_VAULT_CLIENT_ID:     user_input.get(CONF_VAULT_CLIENT_ID, "").strip(),
+                CONF_VAULT_SECRET_CHORES: user_input.get(CONF_VAULT_SECRET_CHORES, "chores-api").strip(),
+                CONF_VAULT_SECRET_BUDGET: user_input.get(CONF_VAULT_SECRET_BUDGET, "budget-api").strip(),
+            }
+            # Only update secret if a new one was entered
+            new_secret = user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip()
+            if new_secret:
+                new_data[CONF_VAULT_CLIENT_SECRET] = new_secret
+            self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+            return self.async_create_entry(title="", data={**self._entry.options})
+
+        return self.async_show_form(
+            step_id="update_vault",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_VAULT_URL,           default=data.get(CONF_VAULT_URL, "http://10.72.16.21:33167")): str,
+                vol.Optional(CONF_VAULT_CLIENT_ID,     default=data.get(CONF_VAULT_CLIENT_ID, "")): str,
+                vol.Optional(CONF_VAULT_CLIENT_SECRET, default=""): str,  # never pre-fill secret
+                vol.Optional(CONF_VAULT_SECRET_CHORES, default=data.get(CONF_VAULT_SECRET_CHORES, "chores-api")): str,
+                vol.Optional(CONF_VAULT_SECRET_BUDGET, default=data.get(CONF_VAULT_SECRET_BUDGET, "budget-api")): str,
             }),
             errors=errors,
         )

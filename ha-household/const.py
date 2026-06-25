@@ -7,6 +7,13 @@ CONF_CHORES_HOST     = "chores_host"
 CONF_CHORES_API_KEY  = "chores_api_key"
 CONF_TRACKED_PEOPLE  = "tracked_people"
 
+# ── Hades Vault ───────────────────────────────────────────────────────────────
+CONF_VAULT_URL           = "vault_url"
+CONF_VAULT_CLIENT_ID     = "vault_client_id"
+CONF_VAULT_CLIENT_SECRET = "vault_client_secret"
+CONF_VAULT_SECRET_CHORES = "vault_secret_chores"
+CONF_VAULT_SECRET_BUDGET = "vault_secret_budget"
+
 CHORES_UPDATE_INTERVAL = 5  # minutes
 
 # ── Calendars ─────────────────────────────────────────────────────────────────

@@ -26,7 +26,9 @@ from .const import (
     CONF_MEAL_HOST,
     COORDINATOR_MEALS,
     MEALS_UPDATE_INTERVAL,
+    CONF_VAULT_SECRET_CHORES,
 )
+from .vault import resolve_api_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,9 +68,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _base_headers(content_type: bool = False) -> dict:
+    async def _base_headers(content_type: bool = False) -> dict:
+        api_key = await resolve_api_key(
+            hass, entry.data,
+            entry.data.get(CONF_VAULT_SECRET_CHORES, ""),
+            entry.data.get(CONF_CHORES_API_KEY, ""),
+        )
         headers = {}
-        api_key = entry.data.get(CONF_CHORES_API_KEY, "")
         if api_key:
             headers["x-api-key"] = api_key
         if content_type:
@@ -108,7 +114,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.post(
                 f"{_host()}/api/reminders/{person_id}",
                 json={"text": text},
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -123,7 +129,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with session.delete(
                 f"{_host()}/api/reminders/{person_id}",
-                headers=_base_headers(),
+                headers=await _base_headers(),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -153,7 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.post(
                 f"{_host()}/api/chores",
                 json=payload,
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -183,7 +189,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.put(
                 f"{_host()}/api/chores/{chore_id}",
                 json=payload,
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -203,7 +209,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.patch(
                 f"{_host()}/api/instances/{instance_id}/complete",
                 json=body,
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -227,7 +233,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.post(
                 f"{_host()}/api/points/adjust",
                 json={"person_id": person_id, "points": points, "reason": reason},
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -263,7 +269,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.post(
                 f"{_host()}/api/points/rewards",
                 json=payload,
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 resp.raise_for_status()
@@ -283,7 +289,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async with session.post(
                 f"{_host()}/api/points/rewards/{reward_id}/redeem",
                 json={"person_id": person_id},
-                headers=_base_headers(content_type=True),
+                headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 data = await resp.json()
@@ -353,6 +359,8 @@ class HadesChoresCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.host           = entry.data[CONF_CHORES_HOST].rstrip("/")
         self.api_key        = entry.data.get(CONF_CHORES_API_KEY, "")
+        self.vault_secret   = entry.data.get(CONF_VAULT_SECRET_CHORES, "")
+        self.entry_data     = entry.data
         self.tracked_people = entry.data.get(CONF_TRACKED_PEOPLE, [])
         super().__init__(
             hass,
@@ -364,9 +372,10 @@ class HadesChoresCoordinator(DataUpdateCoordinator):
     async def _fetch(self, path: str) -> Any:
         """Fetch from Hades API and unwrap {success, data} envelope."""
         url     = f"{self.host}{path}"
+        api_key = await resolve_api_key(self.hass, self.entry_data, self.vault_secret, self.api_key)
         headers = {}
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
+        if api_key:
+            headers["x-api-key"] = api_key
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 resp.raise_for_status()
@@ -667,8 +676,10 @@ class HadesRemindersCoordinator(DataUpdateCoordinator):
     """Coordinator for Hades Reminders API."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        self.host    = entry.data[CONF_CHORES_HOST].rstrip("/")
-        self.api_key = entry.data.get(CONF_CHORES_API_KEY, "")
+        self.host         = entry.data[CONF_CHORES_HOST].rstrip("/")
+        self.api_key      = entry.data.get(CONF_CHORES_API_KEY, "")
+        self.vault_secret = entry.data.get(CONF_VAULT_SECRET_CHORES, "")
+        self.entry_data   = entry.data
         super().__init__(
             hass,
             _LOGGER,
@@ -678,9 +689,10 @@ class HadesRemindersCoordinator(DataUpdateCoordinator):
 
     async def _fetch(self, path: str) -> Any:
         url     = f"{self.host}{path}"
+        api_key = await resolve_api_key(self.hass, self.entry_data, self.vault_secret, self.api_key)
         headers = {}
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
+        if api_key:
+            headers["x-api-key"] = api_key
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 resp.raise_for_status()
