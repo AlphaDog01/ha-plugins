@@ -28,6 +28,10 @@ def load_vault_env() -> dict:
     """
     Read /config/.hades_vault env file written by install.sh.
     Returns a dict of key=value pairs. Returns {} if file doesn't exist.
+
+    NOTE: This does blocking file I/O. Never call this directly from
+    async code — always go through load_vault_env_async(), which runs
+    this in HA's executor instead of the event loop.
     """
     if not os.path.exists(VAULT_ENV_FILE):
         return {}
@@ -45,15 +49,18 @@ def load_vault_env() -> dict:
     return result
 
 
-def save_vault_secret(new_secret: str) -> bool:
+async def load_vault_env_async(hass: HomeAssistant) -> dict:
+    """Async-safe wrapper — runs load_vault_env() in HA's executor."""
+    return await hass.async_add_executor_job(load_vault_env)
+
+
+def _write_vault_env(env: dict) -> bool:
     """
-    Update VAULT_CLIENT_SECRET in /config/.hades_vault.
-    Called when the user updates the secret via the HA options flow.
-    Returns True on success.
+    Blocking write of the env dict back to VAULT_ENV_FILE.
+    Never call this directly from async code — always go through
+    save_vault_secret_async().
     """
     try:
-        env = load_vault_env()
-        env["VAULT_CLIENT_SECRET"] = new_secret
         lines = [f"{k}={v}\n" for k, v in env.items()]
         with open(VAULT_ENV_FILE, "w") as f:
             f.writelines(lines)
@@ -65,13 +72,36 @@ def save_vault_secret(new_secret: str) -> bool:
         return False
 
 
-def get_vault_config(entry_data: dict) -> tuple[str, str, str]:
+def save_vault_secret(new_secret: str) -> bool:
     """
+    Update VAULT_CLIENT_SECRET in /config/.hades_vault.
+    Called when the user updates the secret via the HA options flow.
+    Returns True on success.
+
+    NOTE: This does blocking file I/O (a read then a write). Never call
+    this directly from async code — always go through
+    save_vault_secret_async(), which runs it in HA's executor.
+    """
+    env = load_vault_env()
+    env["VAULT_CLIENT_SECRET"] = new_secret
+    return _write_vault_env(env)
+
+
+async def save_vault_secret_async(hass: HomeAssistant, new_secret: str) -> bool:
+    """Async-safe wrapper — runs save_vault_secret() in HA's executor."""
+    return await hass.async_add_executor_job(save_vault_secret, new_secret)
+
+
+async def get_vault_config_async(
+    hass: HomeAssistant, entry_data: dict
+) -> tuple[str, str, str]:
+    """
+    Async-safe version of get_vault_config.
     Return (vault_url, client_id, client_secret).
     Priority: /config/.hades_vault > config entry data.
     Client ID is always read from the env file if present (immutable from UI).
     """
-    env = load_vault_env()
+    env = await load_vault_env_async(hass)
     vault_url     = env.get("VAULT_URL")            or entry_data.get(CONF_VAULT_URL, "")
     client_id     = env.get("VAULT_CLIENT_ID")      or entry_data.get(CONF_VAULT_CLIENT_ID, "")
     client_secret = env.get("VAULT_CLIENT_SECRET")  or entry_data.get(CONF_VAULT_CLIENT_SECRET, "")
@@ -89,7 +119,7 @@ async def get_vault_token(hass: HomeAssistant, entry_data: dict, secret_name: st
     if cached and cached["expires_at"] > now:
         return cached["token"]
 
-    vault_url, client_id, client_secret = get_vault_config(entry_data)
+    vault_url, client_id, client_secret = await get_vault_config_async(hass, entry_data)
 
     if not vault_url or not client_id or not client_secret:
         _LOGGER.debug("Vault not configured (url=%s, id=%s)", vault_url, bool(client_id))
