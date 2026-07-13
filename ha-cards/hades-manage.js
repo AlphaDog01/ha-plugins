@@ -29,28 +29,46 @@ const MANAGE_STYLES = `
     box-shadow:0 24px 70px rgba(0,0,0,.34);
   }
 
+  .tabs-shell {
+    padding:14px 14px 0;
+  }
+
   .tabs {
-    display:flex;
-    border-bottom:1px solid var(--line);
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+    padding:5px;
+    border:1px solid var(--line);
+    background:rgba(255,255,255,.035);
+    border-radius:15px;
   }
 
   .tab {
-    flex:1;
-    padding:14px;
-    text-align:center;
-    font-size:13px;
-    font-weight:750;
-    letter-spacing:1px;
-    text-transform:uppercase;
+    min-width:0;
+    border:0;
+    border-radius:11px;
+    padding:10px 8px;
     color:#788496;
+    background:transparent;
     cursor:pointer;
-    border-bottom:2px solid transparent;
-    transition:color .15s,border-color .15s;
+    font-size:12px;
+    font-weight:750;
+    letter-spacing:.3px;
+    text-transform:uppercase;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    text-align:center;
+    transition:background .2s,color .2s,transform .2s;
   }
 
+  .tab:hover { color:#D9E1EF; }
+  .tab:active { transform:scale(.98); }
+
   .tab.active {
-    color:#67D4FF;
-    border-bottom:2px solid #67D4FF;
+    color:#FFFFFF;
+    background:linear-gradient(135deg,#27344A,#1B2638);
+    box-shadow:0 5px 15px rgba(0,0,0,.25),inset 0 1px rgba(255,255,255,.07);
   }
 
   .panel { padding:16px; }
@@ -489,10 +507,12 @@ class HadesManage extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${MANAGE_STYLES}</style>
       <div class="manage-card">
-        <div class="tabs">
-          <div class="tab ${this._tab === "chores"  ? "active" : ""}" data-tab="chores">🧹 Chores</div>
-          <div class="tab ${this._tab === "people"  ? "active" : ""}" data-tab="people">👤 People</div>
-          <div class="tab ${this._tab === "rewards" ? "active" : ""}" data-tab="rewards">🎁 Rewards</div>
+        <div class="tabs-shell">
+          <div class="tabs" role="tablist" aria-label="Manage section">
+            <button class="tab ${this._tab === "chores"  ? "active" : ""}" data-tab="chores" role="tab" aria-selected="${this._tab === "chores"}">🧹 Chores</button>
+            <button class="tab ${this._tab === "people"  ? "active" : ""}" data-tab="people" role="tab" aria-selected="${this._tab === "people"}">👤 People</button>
+            <button class="tab ${this._tab === "rewards" ? "active" : ""}" data-tab="rewards" role="tab" aria-selected="${this._tab === "rewards"}">🎁 Rewards</button>
+          </div>
         </div>
         <div class="panel">${panelHtml}</div>
       </div>
