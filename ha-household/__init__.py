@@ -10,7 +10,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from .http import async_register_views
 
 from .const import (
     DOMAIN,
@@ -30,12 +29,13 @@ from .const import (
     CONF_VAULT_SECRET_CHORES,
 )
 from .vault import resolve_api_key
+from .http import async_register_views
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "calendar"]
 
-await async_register_views(hass)
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hades Household from a config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -66,6 +66,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    # Register the /api/hades_household/vault_token/{secret_name} view so
+    # browser-side Lovelace cards can request short-lived Vault tokens
+    # without ever seeing the raw client_id/client_secret.
+    if not hass.data[DOMAIN].get("_view_registered"):
+        await async_register_views(hass)
+        hass.data[DOMAIN]["_view_registered"] = True
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
