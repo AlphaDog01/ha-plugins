@@ -21,56 +21,20 @@ async function getHeaders(hass) {
     return { 'X-API-Key': _vaultToken };
   }
 
-  // Read vault config from ha-household config entry stored in HA states
-  // Falls back to checking window._hadesVaultConfig set manually if needed
-  let vaultUrl    = '';
-  let clientId    = '';
-  let clientSecret = '';
-  let secretName  = 'budget-api';
-
-  // Try to get from hass states attribute set by ha-household sensor
-  if (hass && hass.states) {
-    const sensor = Object.values(hass.states).find(
-      s => s.entity_id && s.entity_id.startsWith('sensor.hades_household_') &&
-           s.attributes && s.attributes.vault_url
-    );
-    if (sensor) {
-      vaultUrl     = sensor.attributes.vault_url     || '';
-      clientId     = sensor.attributes.vault_client_id || '';
-      clientSecret = sensor.attributes.vault_client_secret || '';
-      secretName   = sensor.attributes.vault_secret_budget || 'budget-api';
-    }
-  }
-
-  // Fallback: window._hadesVaultConfig set manually in browser console
-  if (!vaultUrl && window._hadesVaultConfig) {
-    vaultUrl     = window._hadesVaultConfig.vault_url     || '';
-    clientId     = window._hadesVaultConfig.client_id     || '';
-    clientSecret = window._hadesVaultConfig.client_secret || '';
-    secretName   = window._hadesVaultConfig.secret_name   || 'budget-api';
-  }
-
-  if (!vaultUrl || !clientId || !clientSecret) {
-    console.warn('[hades-budget-card] Vault not configured.');
-    return {};
-  }
-
   try {
-    const r = await fetch(`${vaultUrl}/vault/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, secret_name: secretName }),
-    });
-    if (!r.ok) throw new Error('Vault ' + r.status);
-    const d = await r.json();
-    const token = d.value || d.token || d.secret || '';
+    const result = await hass.callApi('GET', 'hades_household/vault_token/budget-api');
+    const token = result?.token;
+
     if (token) {
-      _vaultToken  = token;
-      _vaultExpiry = now + 55000;
+      _vaultToken = token;
+      _vaultExpiry = now + 55_000;
+      return { 'X-API-Key': token };
     }
-    return token ? { 'X-API-Key': token } : {};
+
+    console.warn('[hades-budget-card] No token returned from vault_token endpoint.');
+    return {};
   } catch (e) {
-    console.error('[hades-budget-card] Vault error:', e);
+    console.error('[hades-budget-card] vault_token endpoint failed:', e);
     return {};
   }
 }
