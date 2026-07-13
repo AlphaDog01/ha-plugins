@@ -2,412 +2,427 @@
  * Hades Manage Card
  * Full parent management panel for the Hades chore system.
  * Tabs: Chores | People | Rewards
+ *
+ * Retheme: matches the dark palette used by hades-budget-card.js and
+ * hades-chores-card.js (radial-gradient panel, Inter font, same accent
+ * colors). No functional changes — all service calls are unchanged.
  */
 
 const MANAGE_STYLES = `
-  :host { display: block; }
-  * { box-sizing: border-box; }
+  :host {
+    display:block;
+    font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  * { box-sizing:border-box; }
 
   .manage-card {
-    background: #111827;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px;
-    font-family: var(--primary-font-family, sans-serif);
-    color: #fff;
-    overflow: hidden;
+    --line:rgba(255,255,255,.075);
+    --muted:#7E899A;
+    background:
+      radial-gradient(circle at 15% -10%,rgba(69,104,220,.22),transparent 32%),
+      radial-gradient(circle at 95% 5%,rgba(42,221,169,.10),transparent 25%),
+      #090D14;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:22px;
+    color:#F6F8FC;
+    overflow:hidden;
+    box-shadow:0 24px 70px rgba(0,0,0,.34);
   }
 
   .tabs {
-    display: flex;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display:flex;
+    border-bottom:1px solid var(--line);
   }
 
   .tab {
-    flex: 1;
-    padding: 14px;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
+    flex:1;
+    padding:14px;
+    text-align:center;
+    font-size:13px;
+    font-weight:750;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:#788496;
+    cursor:pointer;
+    border-bottom:2px solid transparent;
+    transition:color .15s,border-color .15s;
   }
 
   .tab.active {
-    color: #3B82F6;
-    border-bottom: 2px solid #3B82F6;
+    color:#67D4FF;
+    border-bottom:2px solid #67D4FF;
   }
 
-  .panel { padding: 16px; }
+  .panel { padding:16px; }
 
   .panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
   }
 
-  .panel-title { font-size: 16px; font-weight: 700; color: #fff; }
+  .panel-title { font-size:16px; font-weight:800; color:#FFFFFF; }
 
   .add-btn {
-    background: #3B82F6;
-    color: #fff;
-    border: none;
-    border-radius: 20px;
-    padding: 7px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: opacity 0.15s;
+    background:#67D4FF;
+    color:#090D14;
+    border:none;
+    border-radius:20px;
+    padding:7px 16px;
+    font-size:13px;
+    font-weight:800;
+    cursor:pointer;
+    transition:opacity .15s;
   }
 
-  .add-btn:hover { opacity: 0.85; }
+  .add-btn:hover { opacity:.85; }
 
   .list-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 10px;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background 0.12s;
-    gap: 10px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 10px;
+    border-radius:12px;
+    cursor:pointer;
+    transition:background .12s;
+    gap:10px;
   }
 
-  .list-row:hover { background: rgba(255,255,255,0.05); }
-  .list-row + .list-row { border-top: 1px solid rgba(255,255,255,0.06); }
+  .list-row:hover { background:rgba(255,255,255,.05); }
+  .list-row + .list-row { border-top:1px solid var(--line); }
 
-  .row-main { flex: 1; min-width: 0; }
+  .row-main { flex:1; min-width:0; }
 
   .row-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: rgba(255,255,255,0.9);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size:14px;
+    font-weight:650;
+    color:#DBE2ED;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
   }
 
   .row-sub {
-    font-size: 12px;
-    color: rgba(255,255,255,0.4);
-    margin-top: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size:12px;
+    color:var(--muted);
+    margin-top:2px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
   }
 
   .row-badge {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 20px;
-    flex-shrink: 0;
+    font-size:11px;
+    font-weight:800;
+    padding:3px 10px;
+    border-radius:20px;
+    flex-shrink:0;
   }
 
-  .badge-active   { background: rgba(34,197,94,0.15);  color: #22C55E; }
-  .badge-inactive { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.3); }
-  .badge-points   { background: rgba(59,130,246,0.15);  color: #3B82F6; }
+  .badge-active   { background:rgba(57,229,140,.12);  color:#39E58C; }
+  .badge-inactive { background:rgba(255,255,255,.08); color:var(--muted); }
+  .badge-points   { background:rgba(103,212,255,.12); color:#67D4FF; }
 
-  .row-arrow { color: rgba(255,255,255,0.2); font-size: 16px; flex-shrink: 0; }
-  .empty { color: rgba(255,255,255,0.3); font-size: 13px; padding: 16px 0; text-align: center; }
+  .row-arrow { color:rgba(255,255,255,.2); font-size:16px; flex-shrink:0; }
+  .empty { color:var(--muted); font-size:13px; padding:16px 0; text-align:center; }
 
   .overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 9998;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.7);
+    z-index:9998;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
   }
 
   .modal {
-    background: #1a2235;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 20px;
-    padding: 24px;
-    width: 100%;
-    max-width: 520px;
-    max-height: 90vh;
-    overflow-y: auto;
-    z-index: 9999;
-    position: relative;
+    background:
+      radial-gradient(circle at 15% -10%,rgba(69,104,220,.18),transparent 32%),
+      #0D1420;
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:20px;
+    padding:24px;
+    width:100%;
+    max-width:520px;
+    max-height:90vh;
+    overflow-y:auto;
+    z-index:9999;
+    position:relative;
+    color:#F6F8FC;
   }
 
   .modal-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 20px;
-    padding-right: 32px;
+    font-size:18px;
+    font-weight:800;
+    color:#FFFFFF;
+    margin-bottom:20px;
+    padding-right:32px;
   }
 
   .close-btn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: rgba(255,255,255,0.1);
-    border: none;
-    color: #fff;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
+    position:absolute;
+    top:20px;
+    right:20px;
+    background:rgba(255,255,255,.1);
+    border:none;
+    color:#fff;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    font-size:16px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
   }
 
-  .field { margin-bottom: 16px; }
+  .field { margin-bottom:16px; }
 
   .field-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
-    margin-bottom: 6px;
-    display: block;
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:6px;
+    display:block;
   }
 
   .field input[type="text"],
   .field input[type="number"],
   .field select,
   .field textarea {
-    width: 100%;
-    background: #0d1525;
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 14px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.15s;
+    width:100%;
+    background:#090D14;
+    color:#F6F8FC;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:14px;
+    font-family:inherit;
+    outline:none;
+    transition:border-color .15s;
   }
 
   .field input:focus,
   .field select:focus,
-  .field textarea:focus { border-color: #3B82F6; }
+  .field textarea:focus { border-color:#67D4FF; }
 
-  .field textarea { resize: vertical; min-height: 72px; }
-  .field select option { background: #1a2235; }
+  .field textarea { resize:vertical; min-height:72px; }
+  .field select option { background:#0D1420; }
 
-  .field-row { display: flex; gap: 12px; }
-  .field-row .field { flex: 1; }
+  .field-row { display:flex; gap:12px; }
+  .field-row .field { flex:1; }
 
   .checkbox-group {
-    background: #0d1525;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    padding: 8px 12px;
+    background:#090D14;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:10px;
+    padding:8px 12px;
   }
 
   .checkbox-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    cursor: pointer;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,.05);
+    cursor:pointer;
   }
 
-  .checkbox-item:last-child { border-bottom: none; }
+  .checkbox-item:last-child { border-bottom:none; }
 
   .checkbox-item input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #3B82F6;
-    cursor: pointer;
-    flex-shrink: 0;
+    width:16px;
+    height:16px;
+    accent-color:#67D4FF;
+    cursor:pointer;
+    flex-shrink:0;
   }
 
-  .checkbox-label { font-size: 14px; color: rgba(255,255,255,0.85); flex: 1; }
-  .field-hint { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 5px; }
+  .checkbox-label { font-size:14px; color:rgba(255,255,255,.85); flex:1; }
+  .field-hint { font-size:11px; color:var(--muted); margin-top:5px; }
 
   .toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 0;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 0;
   }
 
-  .toggle-label { font-size: 14px; color: rgba(255,255,255,0.85); }
+  .toggle-label { font-size:14px; color:rgba(255,255,255,.85); }
 
-  .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle { position:relative; width:44px; height:24px; flex-shrink:0; }
+  .toggle input { opacity:0; width:0; height:0; }
 
   .toggle-slider {
-    position: absolute;
-    inset: 0;
-    background: rgba(255,255,255,0.15);
-    border-radius: 24px;
-    cursor: pointer;
-    transition: background 0.2s;
+    position:absolute;
+    inset:0;
+    background:rgba(255,255,255,.15);
+    border-radius:24px;
+    cursor:pointer;
+    transition:background .2s;
   }
 
   .toggle-slider::before {
-    content: "";
-    position: absolute;
-    width: 18px;
-    height: 18px;
-    left: 3px;
-    top: 3px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform 0.2s;
+    content:"";
+    position:absolute;
+    width:18px;
+    height:18px;
+    left:3px;
+    top:3px;
+    background:#fff;
+    border-radius:50%;
+    transition:transform .2s;
   }
 
-  .toggle input:checked + .toggle-slider { background: #3B82F6; }
-  .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+  .toggle input:checked + .toggle-slider { background:#67D4FF; }
+  .toggle input:checked + .toggle-slider::before { transform:translateX(20px); }
 
   .modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 24px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255,255,255,0.08);
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    margin-top:24px;
+    padding-top:16px;
+    border-top:1px solid var(--line);
   }
 
   .btn-cancel {
-    background: rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.7);
-    border: none;
-    border-radius: 20px;
-    padding: 9px 20px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
+    background:rgba(255,255,255,.08);
+    color:rgba(255,255,255,.7);
+    border:none;
+    border-radius:20px;
+    padding:9px 20px;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
   }
 
   .btn-save {
-    background: #3B82F6;
-    color: #fff;
-    border: none;
-    border-radius: 20px;
-    padding: 9px 20px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: opacity 0.15s;
+    background:#67D4FF;
+    color:#090D14;
+    border:none;
+    border-radius:20px;
+    padding:9px 20px;
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+    transition:opacity .15s;
   }
 
-  .btn-save:hover { opacity: 0.85; }
+  .btn-save:hover { opacity:.85; }
 
   .btn-danger {
-    background: rgba(239,68,68,0.15);
-    color: #EF4444;
-    border: none;
-    border-radius: 20px;
-    padding: 9px 20px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    margin-right: auto;
+    background:rgba(255,112,133,.15);
+    color:#FF7085;
+    border:none;
+    border-radius:20px;
+    padding:9px 20px;
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+    margin-right:auto;
   }
 
   .btn-complete {
-    background: rgba(34,197,94,0.15);
-    color: #22C55E;
-    border: 1px solid rgba(34,197,94,0.3);
-    border-radius: 20px;
-    padding: 9px 20px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: opacity 0.15s;
-    width: 100%;
-    margin-bottom: 12px;
+    background:rgba(57,229,140,.15);
+    color:#39E58C;
+    border:1px solid rgba(57,229,140,.3);
+    border-radius:20px;
+    padding:9px 20px;
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+    transition:opacity .15s;
+    width:100%;
+    margin-bottom:12px;
   }
 
-  .btn-complete:hover { opacity: 0.85; }
-  .btn-complete:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-complete:hover { opacity:.85; }
+  .btn-complete:disabled { opacity:.3; cursor:not-allowed; }
 
   .chore-list {
-    background: #0d1525;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 8px 12px;
-    margin-bottom: 16px;
+    background:#090D14;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:10px;
+    padding:8px 12px;
+    margin-bottom:16px;
   }
 
   .chore-list-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: 13px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:6px 0;
+    border-bottom:1px solid rgba(255,255,255,.05);
+    font-size:13px;
   }
 
-  .chore-list-item:last-child { border-bottom: none; }
+  .chore-list-item:last-child { border-bottom:none; }
 
-  .chore-list-item.done { color: rgba(255,255,255,0.3); text-decoration: line-through; }
-  .chore-list-item.pending { color: rgba(255,255,255,0.85); }
+  .chore-list-item.done { color:var(--muted); text-decoration:line-through; }
+  .chore-list-item.pending { color:rgba(255,255,255,.85); }
 
-  .chore-pts { color: rgba(255,255,255,0.3); font-size: 12px; }
-  .chore-pts.pending { color: #22C55E; }
+  .chore-pts { color:var(--muted); font-size:12px; }
+  .chore-pts.pending { color:#39E58C; }
 
   .points-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:8px;
   }
 
   .points-row input {
-    width: 80px;
-    background: #0d1525;
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 8px;
-    padding: 7px 10px;
-    font-size: 13px;
-    text-align: center;
+    width:80px;
+    background:#090D14;
+    color:#F6F8FC;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:8px;
+    padding:7px 10px;
+    font-size:13px;
+    text-align:center;
   }
 
-  .points-row input[type="text"] { flex: 1; width: auto; text-align: left; }
+  .points-row input[type="text"] { flex:1; width:auto; text-align:left; }
 
   .btn-add-pts {
-    background: rgba(34,197,94,0.15);
-    color: #22C55E;
-    border: none;
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
+    background:rgba(57,229,140,.15);
+    color:#39E58C;
+    border:none;
+    border-radius:8px;
+    padding:7px 12px;
+    font-size:12px;
+    font-weight:800;
+    cursor:pointer;
   }
 
   .btn-sub-pts {
-    background: rgba(239,68,68,0.15);
-    color: #EF4444;
-    border: none;
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
+    background:rgba(255,112,133,.15);
+    color:#FF7085;
+    border:none;
+    border-radius:8px;
+    padding:7px 12px;
+    font-size:12px;
+    font-weight:800;
+    cursor:pointer;
   }
 
-  .saving { opacity: 0.5; pointer-events: none; }
+  .saving { opacity:.5; pointer-events:none; }
 
   .completing {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: #22C55E;
-    font-size: 13px;
-    padding: 8px 0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    color:#39E58C;
+    font-size:13px;
+    padding:8px 0;
   }
 `;
 
@@ -728,7 +743,7 @@ class HadesManage extends HTMLElement {
     // Build chore list
     let choreListHtml = "";
     if (!pending.length && !completed.length) {
-      choreListHtml = `<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:8px 0">No chores today</div>`;
+      choreListHtml = `<div style="color:var(--muted);font-size:13px;padding:8px 0">No chores today</div>`;
     } else {
       completed.forEach(c => {
         choreListHtml += `<div class="chore-list-item done">
@@ -763,7 +778,7 @@ class HadesManage extends HTMLElement {
 
           <div class="field">
             <label class="field-label">Current Points</label>
-            <div style="font-size:28px;font-weight:700;color:#3B82F6;padding:8px 0">⭐ ${person.points_total}</div>
+            <div style="font-size:28px;font-weight:800;color:#67D4FF;padding:8px 0">⭐ ${person.points_total}</div>
           </div>
 
           <div class="field">
@@ -1114,7 +1129,7 @@ class HadesManageEditor extends HTMLElement {
   _render() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; padding: 16px; color: #ccc; font-size: 13px; }
+        :host { display: block; padding: 16px; color: #ccc; font-size: 13px; font-family:Inter,sans-serif; }
         p { color: rgba(255,255,255,0.5); line-height: 1.6; }
       </style>
       <p>🏠 Hades Management Panel</p>
