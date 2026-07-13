@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from .http import async_register_views
 
 from .const import (
     DOMAIN,
@@ -34,7 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "calendar"]
 
-
+await async_register_views(hass)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hades Household from a config entry."""
     hass.data.setdefault(DOMAIN, {})
