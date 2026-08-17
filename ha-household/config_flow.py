@@ -117,7 +117,7 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_CHORES_HOST,          default="http://10.72.16.21:33911"): str,
+                vol.Required(CONF_CHORES_HOST,          default="http://10.72.16.117:3010/api/chores"): str,
                 vol.Optional(CONF_VAULT_URL,            default=env.get("VAULT_URL", "http://10.72.16.21:33167")): str,
                 vol.Optional(CONF_VAULT_CLIENT_ID,      default=env.get("VAULT_CLIENT_ID", "")): str,
                 vol.Optional(CONF_VAULT_CLIENT_SECRET,  default=""): str,
@@ -262,12 +262,13 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                 errors["base"] = "unknown"
 
             if not errors:
+                # async_update_entry fires the update listener registered in
+                # __init__.py (entry.add_update_listener), which already
+                # reloads the entry — an explicit async_reload here on top of
+                # that queues a second, redundant reload of this integration.
                 self.hass.config_entries.async_update_entry(
                     self._entry,
                     data={**self._entry.data, CONF_CHORES_HOST: host},
-                )
-                self.hass.async_create_task(
-                    self.hass.config_entries.async_reload(self._entry.entry_id)
                 )
                 return self.async_create_entry(title="", data={**self._entry.options})
 
@@ -301,9 +302,10 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                     errors["base"] = "cannot_connect"
 
             if not errors:
-                self.hass.async_create_task(
-                    self.hass.config_entries.async_reload(self._entry.entry_id)
-                )
+                # async_create_entry() below changes entry.options, which
+                # already fires the update listener (entry.add_update_listener
+                # in __init__.py) and triggers a reload — no need to also
+                # schedule one explicitly here.
                 return self.async_create_entry(title="", data={**self._entry.options, CONF_MEAL_HOST: meal_host})
 
         return self.async_show_form(
@@ -550,7 +552,12 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
         )
 
     def _save(self, tracked: list | None = None) -> FlowResult:
-        data = {CONF_CALENDARS: self._calendars}
+        # async_create_entry()'s `data` REPLACES entry.options wholesale — it
+        # does not merge. Start from the existing options so a calendar-only
+        # save (add/edit/remove) doesn't silently drop tracked_people (or any
+        # other option key) that was set on a previous, unrelated save.
+        data = dict(self._entry.options)
+        data[CONF_CALENDARS] = self._calendars
         if tracked is not None:
             data[CONF_TRACKED_PEOPLE] = tracked
         return self.async_create_entry(title="", data=data)

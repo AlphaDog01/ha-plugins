@@ -43,14 +43,14 @@ A custom Home Assistant integration that combines chore tracking and calendar ma
 
 ## Installation
 
-1. Create a new GitHub repo: `AlphaDog01/hades-household`
-2. Push all files from this folder to the repo root
-3. Copy `install_hades_household.sh` to your HA SSH home (`~`)
-4. Update `GITHUB_TOKEN` in the script
-5. Run `chmod +x ~/install_hades_household.sh && ./install_hades_household.sh`
-6. Restart HA: Settings → System → Restart
-7. Go to Settings → Integrations → Add → search **Hades Household**
-8. Follow the 3-step setup wizard
+This plugin lives in the `AlphaDog01/ha-plugins` monorepo (`ha-household/` folder), installed via the repo's shared `install.sh` — see the top-level repo README for the full bootstrap/install flow.
+
+Quick version:
+1. Run `bootstrap.sh` (fetches a fresh GitHub token from Hades Vault, pulls `install.sh`, and runs it)
+2. `install.sh household` installs just this plugin to `/config/custom_components/hades_household/`
+3. Restart HA: Settings → System → Restart (a plain integration Reload isn't always enough for new/changed Python files)
+4. Go to Settings → Integrations → Add → search **Hades Household**
+5. Follow the 3-step setup wizard (Chores/Vault connection → tracked people → optional first calendar)
 
 ---
 
@@ -74,5 +74,5 @@ The coordinator pattern means each module polls independently on its own schedul
 ## Rules
 
 - Always modify files in GitHub and repull — never edit directly on the server
-- Repull: `./install_hades_household.sh` then restart HA
+- Repull: `./install.sh household` (or re-run `bootstrap.sh` if `~/install.sh` was wiped by an HA update) then restart HA
 - SSH: `ssh root@10.72.16.61 -p 2309`

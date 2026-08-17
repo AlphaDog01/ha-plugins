@@ -369,7 +369,9 @@ class HadesChoresCoordinator(DataUpdateCoordinator):
         self.api_key        = entry.data.get(CONF_CHORES_API_KEY, "")
         self.vault_secret   = entry.data.get(CONF_VAULT_SECRET_CHORES, "")
         self.entry_data     = entry.data
-        self.tracked_people = entry.data.get(CONF_TRACKED_PEOPLE, [])
+        self.tracked_people = entry.options.get(
+            CONF_TRACKED_PEOPLE, entry.data.get(CONF_TRACKED_PEOPLE, [])
+        )
         super().__init__(
             hass,
             _LOGGER,

@@ -38,7 +38,9 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
 
     # ── Chores sensors ────────────────────────────────────────────────────────
-    tracked_people = entry.data.get(CONF_TRACKED_PEOPLE, [])
+    tracked_people = entry.options.get(
+        CONF_TRACKED_PEOPLE, entry.data.get(CONF_TRACKED_PEOPLE, [])
+    )
     chores_data    = chores_coord.data or {}
 
     for person_id in tracked_people:
