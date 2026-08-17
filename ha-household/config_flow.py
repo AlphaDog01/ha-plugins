@@ -53,7 +53,7 @@ async def _fetch_people(hass, host: str, entry_data: dict) -> list[dict]:
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key
-    url = f"{host.rstrip('/')}/api/people"
+    url = f"{host.rstrip('/')}/people"
     async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
         resp.raise_for_status()
         data = await resp.json()

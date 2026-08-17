@@ -120,7 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session   = async_get_clientsession(hass)
         try:
             async with session.post(
-                f"{_host()}/api/reminders/{person_id}",
+                f"{_host()}/reminders/{person_id}",
                 json={"text": text},
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -136,7 +136,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session   = async_get_clientsession(hass)
         try:
             async with session.delete(
-                f"{_host()}/api/reminders/{person_id}",
+                f"{_host()}/reminders/{person_id}",
                 headers=await _base_headers(),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
@@ -165,7 +165,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session = async_get_clientsession(hass)
         try:
             async with session.post(
-                f"{_host()}/api/chores",
+                f"{_host()}/chores",
                 json=payload,
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -195,7 +195,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session = async_get_clientsession(hass)
         try:
             async with session.put(
-                f"{_host()}/api/chores/{chore_id}",
+                f"{_host()}/chores/{chore_id}",
                 json=payload,
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -215,7 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if person_id:
                 body["completed_by"] = person_id
             async with session.patch(
-                f"{_host()}/api/instances/{instance_id}/complete",
+                f"{_host()}/instances/{instance_id}/complete",
                 json=body,
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -239,7 +239,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session   = async_get_clientsession(hass)
         try:
             async with session.post(
-                f"{_host()}/api/points/adjust",
+                f"{_host()}/points/adjust",
                 json={"person_id": person_id, "points": points, "reason": reason},
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -275,7 +275,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session = async_get_clientsession(hass)
         try:
             async with session.post(
-                f"{_host()}/api/points/rewards",
+                f"{_host()}/rewards",
                 json=payload,
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -295,7 +295,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session     = async_get_clientsession(hass)
         try:
             async with session.post(
-                f"{_host()}/api/points/rewards/{reward_id}/redeem",
+                f"{_host()}/rewards/{reward_id}/redeem",
                 json={"person_id": person_id},
                 headers=await _base_headers(content_type=True),
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -397,11 +397,11 @@ class HadesChoresCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch all chores data from real API routes."""
         try:
-            all_instances = await self._fetch("/api/instances/today")
-            leaderboard   = await self._fetch("/api/dashboard/leaderboard")
-            all_people    = await self._fetch("/api/people")
-            all_chores    = await self._fetch("/api/chores")
-            all_rewards   = await self._fetch("/api/points/rewards")
+            all_instances = await self._fetch("/instances/today")
+            leaderboard   = await self._fetch("/dashboard/leaderboard")
+            all_people    = await self._fetch("/people")
+            all_chores    = await self._fetch("/chores")
+            all_rewards   = await self._fetch("/rewards")
 
             data: dict = {}
 
@@ -713,7 +713,7 @@ class HadesRemindersCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         try:
-            reminders = await self._fetch("/api/reminders")
+            reminders = await self._fetch("/reminders")
             result    = {}
             if isinstance(reminders, list):
                 for r in reminders:
