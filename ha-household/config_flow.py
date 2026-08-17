@@ -224,13 +224,59 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options={
-                "add_calendar":    "Add a calendar",
-                "edit_calendar":   "Edit a calendar",
-                "remove_calendar": "Remove a calendar",
-                "update_people":   "Update tracked people",
-                "update_meal_host": "Update Meal Planner URL",
-                "update_vault":    "Update Vault Credentials",
+                "add_calendar":      "Add a calendar",
+                "edit_calendar":     "Edit a calendar",
+                "remove_calendar":   "Remove a calendar",
+                "update_people":     "Update tracked people",
+                "update_chores_host": "Update Chores API Host",
+                "update_meal_host":  "Update Meal Planner URL",
+                "update_vault":      "Update Vault Credentials",
             },
+        )
+
+    # ── Chores API Host ──────────────────────────────────────────────────────
+
+    async def async_step_update_chores_host(self, user_input: dict | None = None) -> FlowResult:
+        """Update the chores API host URL."""
+        errors: dict = {}
+        current = self._entry.data.get(CONF_CHORES_HOST, "")
+
+        if user_input is not None:
+            host = user_input.get(CONF_CHORES_HOST, "").strip().rstrip("/")
+            if host:
+                try:
+                    people = await _fetch_people(self.hass, host, self._entry.data)
+                    if not people:
+                        errors["base"] = "cannot_connect"
+                except aiohttp.ClientConnectorError:
+                    errors["base"] = "cannot_connect"
+                except aiohttp.ClientResponseError as err:
+                    if err.status in (401, 403):
+                        errors["base"] = "invalid_auth"
+                    else:
+                        errors["base"] = "cannot_connect"
+                except Exception:
+                    _LOGGER.exception("Unexpected error connecting to Hades API")
+                    errors["base"] = "unknown"
+            else:
+                errors["base"] = "unknown"
+
+            if not errors:
+                self.hass.config_entries.async_update_entry(
+                    self._entry,
+                    data={**self._entry.data, CONF_CHORES_HOST: host},
+                )
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(self._entry.entry_id)
+                )
+                return self.async_create_entry(title="", data={**self._entry.options})
+
+        return self.async_show_form(
+            step_id="update_chores_host",
+            data_schema=vol.Schema({
+                vol.Required(CONF_CHORES_HOST, default=current): str,
+            }),
+            errors=errors,
         )
 
     # ── Meal Host ─────────────────────────────────────────────────────────────
