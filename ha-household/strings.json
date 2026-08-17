@@ -6,7 +6,13 @@
         "description": "Connect to your Hades chore tracking server.",
         "data": {
           "chores_host": "API Host (e.g. http://10.72.16.21:33911)",
-          "chores_api_key": "API Key"
+          "chores_api_key": "API Key",
+          "vault_url": "Vault URL",
+          "vault_client_id": "Vault Client ID",
+          "vault_client_secret": "Vault Client Secret",
+          "vault_secret_chores": "Vault Secret Name — Chores",
+          "vault_secret_budget": "Vault Secret Name — Budget",
+          "meal_host": "Meal Planner Host (e.g. http://10.72.16.57:3000)"
         }
       },
       "people": {
@@ -40,9 +46,13 @@
       "init": {
         "title": "Hades Household — Configure",
         "menu_options": {
-          "add_calendar":    "Add a calendar",
-          "remove_calendar": "Remove a calendar",
-          "update_people":   "Update tracked people"
+          "add_calendar":       "Add a calendar",
+          "edit_calendar":      "Edit a calendar",
+          "remove_calendar":    "Remove a calendar",
+          "update_people":      "Update tracked people",
+          "update_chores_host": "Update Chores API Host",
+          "update_meal_host":   "Update Meal Planner URL",
+          "update_vault":       "Update Vault Credentials"
         }
       },
       "edit_calendar": {
@@ -57,6 +67,8 @@
           "calendar_color": "Color"
         }
       },
+      "add_calendar": {
+        "title": "Add Calendar — Type",
         "data": {
           "calendar_type": "Calendar Type"
         }
@@ -90,10 +102,34 @@
         "data": {
           "tracked_people": "People"
         }
+      },
+      "update_chores_host": {
+        "title": "Update Chores API Host",
+        "description": "Point the integration at a new Hades Chores API address.",
+        "data": {
+          "chores_host": "API Host (e.g. http://10.72.16.21:33911)"
+        }
+      },
+      "update_meal_host": {
+        "title": "Update Meal Planner URL",
+        "data": {
+          "meal_host": "Meal Planner Host (e.g. http://10.72.16.57:3000)"
+        }
+      },
+      "update_vault": {
+        "title": "Update Vault Credentials",
+        "description": "Client ID: {client_id} (read-only, set by install.sh).",
+        "data": {
+          "vault_url": "Vault URL",
+          "vault_client_secret": "Vault Client Secret",
+          "vault_secret_chores": "Vault Secret Name — Chores",
+          "vault_secret_budget": "Vault Secret Name — Budget"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not connect. Check credentials and try again.",
+      "invalid_auth":   "Invalid API key.",
       "invalid_url":    "Could not reach the calendar URL. Check it and try again.",
       "unknown":        "All fields are required."
     }
