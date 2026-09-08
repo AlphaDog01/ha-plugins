@@ -32,7 +32,12 @@ CALENDAR_UPDATE_INTERVAL = 30  # minutes
 # ── Coordinator keys ──────────────────────────────────────────────────────────
 COORDINATOR_CALENDARS = "calendars"
 
-# ── Meal Planner ──────────────────────────────────────────────────────────────
-CONF_MEAL_HOST          = "meal_host"
-COORDINATOR_MEALS       = "meals"
-MEALS_UPDATE_INTERVAL   = 10  # minutes
+# ── Hades Vault ───────────────────────────────────────────────────────────────
+# Generic credential store — not tied to any specific module. Any future
+# module (a new card, a new API integration) that needs a short-lived token
+# instead of a hardcoded key can call vault.get_vault_token(hass, entry_data,
+# secret_name) using the secret name configured here.
+CONF_VAULT_URL           = "vault_url"
+CONF_VAULT_CLIENT_ID     = "vault_client_id"
+CONF_VAULT_CLIENT_SECRET = "vault_client_secret"
+CONF_VAULT_SECRET_NAME   = "vault_secret_name"

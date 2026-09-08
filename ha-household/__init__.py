@@ -7,17 +7,15 @@ from datetime import timedelta, datetime, date
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
     DOMAIN,
     CONF_CALENDARS,
     CALENDAR_UPDATE_INTERVAL,
     COORDINATOR_CALENDARS,
-    CONF_MEAL_HOST,
-    COORDINATOR_MEALS,
-    MEALS_UPDATE_INTERVAL,
 )
+from .http import async_register_views
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,17 +33,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         COORDINATOR_CALENDARS: calendar_coordinator,
     }
 
-    # ── Meal coordinator (optional — only if meal_host configured) ────────────
-    meal_host = entry.options.get(CONF_MEAL_HOST, entry.data.get(CONF_MEAL_HOST, "")).strip()
-    if meal_host:
-        meal_coordinator = HadesMealCoordinator(hass, meal_host)
-        await meal_coordinator.async_config_entry_first_refresh()
-        coordinators[COORDINATOR_MEALS] = meal_coordinator
-
     hass.data[DOMAIN][entry.entry_id] = coordinators
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    # Register the /api/hades_household/vault_token/{secret_name} view so
+    # browser-side Lovelace cards can request short-lived Vault tokens
+    # without ever seeing the raw client_id/client_secret.
+    if not hass.data[DOMAIN].get("_view_registered"):
+        await async_register_views(hass)
+        hass.data[DOMAIN]["_view_registered"] = True
 
     return True
 
@@ -252,31 +250,3 @@ class HadesCalendarCoordinator(DataUpdateCoordinator):
                     "error":       str(err),
                 }
         return result
-
-
-# ── Meal Coordinator ──────────────────────────────────────────────────────────
-
-class HadesMealCoordinator(DataUpdateCoordinator):
-    """Coordinator for Hades Meal Planner — polls /api/today every 10 minutes."""
-
-    def __init__(self, hass: HomeAssistant, host: str) -> None:
-        self.host = host.rstrip("/")
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=f"{DOMAIN}_meals",
-            update_interval=timedelta(minutes=MEALS_UPDATE_INTERVAL),
-        )
-
-    async def _async_update_data(self) -> dict:
-        url = f"{self.host}/api/today"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 404:
-                        return {"today": {"title": "No meal plan", "photo": None, "method": None}}
-                    resp.raise_for_status()
-                    data = await resp.json()
-                    return {"today": data}
-        except aiohttp.ClientError as err:
-            raise UpdateFailed(f"Meal planner unreachable: {err}") from err

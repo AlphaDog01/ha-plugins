@@ -16,7 +16,6 @@ const ACCENT_COLORS = {
 const CARD_TYPES = {
   calendar:          "Calendar (single source)",
   combined_calendar: "Calendar (all sources)",
-  meal:              "Meal Plan — Today",
 };
 
 // Default sizes
@@ -36,12 +35,6 @@ const BASE_STYLES = `
     box-sizing: border-box;
   }
 
-  /* ── Title class ── */
-  .t  { font-size: var(--title); }
-
-  /* ── Subtitle class ── */
-  .s  { font-size: var(--sub); }
-
   .cal-title-bar { font-size: var(--title); font-weight: 700; color: #fff; margin-bottom: 12px; }
   .cal-row {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -52,71 +45,6 @@ const BASE_STYLES = `
   .cal-loc        { font-size: var(--sub); color: rgba(255,255,255,0.35); margin-top: 2px; }
   .cal-allday     { font-size: var(--sub); padding: 1px 8px; border-radius: 20px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
   .no-events      { color: rgba(255,255,255,0.3); font-size: var(--sub); padding: 8px 0; }
-
-  /* ── Meal Card ── */
-  .meal-photo {
-    width: calc(100% + 32px);
-    margin: -16px -16px 14px;
-    height: 180px;
-    object-fit: cover;
-    border-radius: 20px 20px 0 0;
-    display: block;
-  }
-  .meal-emoji-hero {
-    width: calc(100% + 32px);
-    margin: -16px -16px 14px;
-    height: 120px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 56px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 20px 20px 0 0;
-  }
-  .meal-header { margin-bottom: 10px; }
-  .meal-day-badge {
-    display: inline-flex; flex-direction: column; align-items: center;
-    border-radius: 10px; padding: 4px 12px; margin-bottom: 8px;
-    min-width: 52px;
-  }
-  .meal-day-label { font-size: 9px; font-weight: 700; letter-spacing: .1em; opacity: .8; }
-  .meal-day-num   { font-size: calc(var(--title) * 1.1); font-weight: 700; line-height: 1.1; }
-  .meal-title {
-    font-weight: 700; line-height: 1.25;
-    color: #fff; margin-bottom: 8px;
-  }
-  .meal-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-  .meal-tag {
-    font-size: var(--sub); padding: 3px 10px;
-    border-radius: 999px; font-weight: 600;
-  }
-  .meal-note {
-    border-left: 3px solid; border-radius: 0;
-    padding: 8px 12px; font-size: var(--sub);
-    line-height: 1.5; margin-bottom: 10px;
-  }
-  .meal-section-label {
-    font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; margin: 12px 0 8px;
-  }
-  .meal-ingr-list { display: flex; flex-direction: column; gap: 0; }
-  .meal-ingr-row {
-    display: flex; align-items: baseline; gap: 8px;
-    padding: 5px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .meal-ingr-row:last-child { border-bottom: none; }
-  .meal-ingr-dot  { font-size: 7px; flex-shrink: 0; margin-top: 2px; }
-  .meal-ingr-name { flex: 1; color: rgba(255,255,255,0.85); }
-  .meal-ingr-qty  { color: rgba(255,255,255,0.35); white-space: nowrap; }
-  .meal-steps-list { display: flex; flex-direction: column; gap: 6px; }
-  .meal-step-row  { display: flex; align-items: flex-start; gap: 10px; }
-  .meal-step-num  {
-    border-radius: 6px; width: 20px; height: 20px; min-width: 20px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; flex-shrink: 0; margin-top: 1px;
-  }
-  .meal-step-text { flex: 1; line-height: 1.45; }
-  .meal-empty { text-align: center; padding: 24px 0; }
-  .meal-empty-text { font-size: var(--title); font-weight: 700; color: rgba(255,255,255,0.4); }
 `;
 
 
@@ -167,7 +95,6 @@ class HadesCard extends HTMLElement {
     switch (type) {
       case "calendar":           inner = this._renderCalendar();         break;
       case "combined_calendar":  inner = this._renderCombinedCalendar(); break;
-      case "meal":               inner = this._renderMeal();             break;
       default:            inner = `<div class="no-events">Unknown card type: ${type}</div>`;
     }
 
@@ -279,112 +206,6 @@ class HadesCard extends HTMLElement {
       </div>`;
   }
 
-  // ── Meal ─────────────────────────────────────────────────────────────────────
-
-  _renderMeal() {
-    const accent  = this._accent();
-    const entity  = this._config.entity || "sensor.hades_meal_today";
-    const attr    = this._attr(entity);
-    const title   = this._state(entity)?.state ?? "No meal plan";
-    const day     = attr.day_number;
-    const emoji   = attr.emoji   || "🍽";
-    const method  = attr.method  || "";
-    const portions= attr.portions || 7;
-    const photo   = attr.photo   || null;
-    const ingredients = Array.isArray(attr.ingredients) ? attr.ingredients : [];
-    const steps       = Array.isArray(attr.steps)       ? attr.steps       : [];
-    const diabetic    = attr.diabetic_note || "";
-    const prepNote    = attr.prep_notes    || "";
-    const isWeekend   = attr.weekend;
-    const isRepeat    = attr.repeat;
-
-    if (title === "No meal plan") {
-      return `
-        <div class="meal-empty">
-          <div style="font-size:40px;margin-bottom:8px">🍽</div>
-          <div class="meal-empty-text">No active meal plan</div>
-          <div class="s" style="color:rgba(255,255,255,0.3);margin-top:4px">Set a start date in the Meal Planner admin</div>
-        </div>`;
-    }
-
-    // ── Photo / Emoji hero ───────────────────────────────────────────────────
-    const heroHtml = photo
-      ? `<img src="${photo}" class="meal-photo" alt="${title}">`
-      : `<div class="meal-emoji-hero">${emoji}</div>`;
-
-    // ── Day badge ────────────────────────────────────────────────────────────
-    const badgeColor = isWeekend ? "#fbbf24" : accent.hex;
-    const badgeBg    = isWeekend ? "rgba(251,191,36,0.15)" : accent.bg;
-    const badgeLabel = isWeekend ? "WEEKEND" : isRepeat ? "REPEAT" : "DAY";
-    const dayBadge   = day != null
-      ? `<div class="meal-day-badge" style="background:${badgeBg};color:${badgeColor}">
-           <span class="meal-day-label">${badgeLabel}</span>
-           <span class="meal-day-num">${day}</span>
-         </div>`
-      : "";
-
-    // ── Tags ─────────────────────────────────────────────────────────────────
-    const tags = [
-      method   ? `<span class="meal-tag" style="background:${accent.bg};color:${accent.hex}">${method}</span>` : "",
-      portions ? `<span class="meal-tag" style="background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5)">${portions} portions</span>` : "",
-      isWeekend? `<span class="meal-tag" style="background:rgba(251,191,36,0.12);color:#fbbf24">📅 Fresh day</span>` : "",
-    ].filter(Boolean).join("");
-
-    // ── Diabetic / prep notes ────────────────────────────────────────────────
-    const notesHtml = [
-      diabetic ? `<div class="meal-note" style="border-color:${accent.hex};color:${accent.hex};background:${accent.bg}">💡 ${diabetic}</div>` : "",
-      prepNote ? `<div class="meal-note" style="border-color:#fbbf24;color:#a08040;background:rgba(251,191,36,0.08)">🧊 ${prepNote}</div>` : "",
-    ].filter(Boolean).join("");
-
-    // ── Ingredients ──────────────────────────────────────────────────────────
-    const maxIngr = this._config.max_ingredients ?? 6;
-    const ingrRows = ingredients.slice(0, maxIngr).map(ing => {
-      const isObj  = typeof ing === "object" && ing !== null;
-      const item   = isObj ? (ing.item || "") : ing;
-      const qty    = isObj ? (ing.qty  || "") : "";
-      return `<div class="meal-ingr-row">
-        <span class="meal-ingr-dot" style="color:${accent.hex}">◆</span>
-        <span class="meal-ingr-name s">${item}</span>
-        ${qty ? `<span class="meal-ingr-qty s">${qty}</span>` : ""}
-      </div>`;
-    }).join("");
-    const ingrMore = ingredients.length > maxIngr
-      ? `<div class="s" style="color:rgba(255,255,255,0.25);margin-top:4px">+${ingredients.length - maxIngr} more</div>`
-      : "";
-
-    // ── Steps ────────────────────────────────────────────────────────────────
-    const showSteps = this._config.show_steps !== false;
-    const maxSteps  = this._config.max_steps ?? 5;
-    const stepsHtml = showSteps ? steps.slice(0, maxSteps).map((s, i) => {
-      const isMealPrep = typeof s === "string" && s.startsWith("MEAL PREP");
-      const numBg      = isMealPrep ? accent.bg   : "rgba(255,255,255,0.07)";
-      const numColor   = isMealPrep ? accent.hex  : "rgba(255,255,255,0.4)";
-      const textColor  = isMealPrep ? accent.hex  : "rgba(255,255,255,0.8)";
-      return `<div class="meal-step-row">
-        <span class="meal-step-num s" style="background:${numBg};color:${numColor}">${i + 1}</span>
-        <span class="meal-step-text s" style="color:${textColor}">${s}</span>
-      </div>`;
-    }).join("") : "";
-    const stepsMore = showSteps && steps.length > maxSteps
-      ? `<div class="s" style="color:rgba(255,255,255,0.25);margin-top:4px">+${steps.length - maxSteps} more steps</div>`
-      : "";
-
-    return `
-      ${heroHtml}
-      <div class="meal-header">
-        ${dayBadge}
-        <div class="meal-title t">${title}</div>
-        <div class="meal-tags">${tags}</div>
-      </div>
-      ${notesHtml}
-      ${ingredients.length ? `
-        <div class="meal-section-label s" style="color:${accent.hex}">INGREDIENTS</div>
-        <div class="meal-ingr-list">${ingrRows}${ingrMore}</div>` : ""}
-      ${showSteps && steps.length ? `
-        <div class="meal-section-label s" style="color:${accent.hex}">STEPS</div>
-        <div class="meal-steps-list">${stepsHtml}${stepsMore}</div>` : ""}
-    `;
-  }
 }
 
 
@@ -591,6 +412,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type:        "hades-card",
   name:        "Hades Card",
-  description: "Household calendars and meal plan — with live font sizing.",
+  description: "Household calendars — with live font sizing.",
   preview:     true,
 });

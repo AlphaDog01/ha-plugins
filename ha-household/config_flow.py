@@ -22,11 +22,15 @@ from .const import (
     CONF_CALENDAR_PASSWORD,
     CONF_CALENDAR_COLOR,
     CONF_CALENDAR_FILTER,
-    CONF_MEAL_HOST,
     CALENDAR_TYPE_ICAL,
     CALENDAR_TYPE_CALDAV,
     CALENDAR_COLORS,
+    CONF_VAULT_URL,
+    CONF_VAULT_CLIENT_ID,
+    CONF_VAULT_CLIENT_SECRET,
+    CONF_VAULT_SECRET_NAME,
 )
+from .vault import load_vault_env, save_vault_secret
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,27 +44,30 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._data: dict[str, Any] = {}
 
     async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
-        """Step 1 — Meal Planner connection (optional)."""
+        """Step 1 — Hades Vault credentials (optional)."""
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
         errors: dict = {}
 
         if user_input is not None:
-            meal_host = user_input.get(CONF_MEAL_HOST, "").strip()
-            if meal_host:
-                ok = await self._test_meal_host(meal_host)
-                if not ok:
-                    errors["base"] = "cannot_connect"
+            self._data.update({
+                CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
+                CONF_VAULT_CLIENT_ID:     user_input.get(CONF_VAULT_CLIENT_ID, "").strip(),
+                CONF_VAULT_CLIENT_SECRET: user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip(),
+                CONF_VAULT_SECRET_NAME:   user_input.get(CONF_VAULT_SECRET_NAME, "").strip(),
+            })
+            return await self.async_step_calendars()
 
-            if not errors:
-                self._data[CONF_MEAL_HOST] = meal_host
-                return await self.async_step_calendars()
-
+        # Pre-fill from /config/.hades_vault if it exists
+        env = load_vault_env()
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Optional(CONF_MEAL_HOST, default="http://10.72.16.57:3000"): str,
+                vol.Optional(CONF_VAULT_URL,           default=env.get("VAULT_URL", "http://10.72.16.21:33167")): str,
+                vol.Optional(CONF_VAULT_CLIENT_ID,      default=env.get("VAULT_CLIENT_ID", "")): str,
+                vol.Optional(CONF_VAULT_CLIENT_SECRET,  default=""): str,
+                vol.Optional(CONF_VAULT_SECRET_NAME,    default=env.get("VAULT_SECRET_NAME", "")): str,
             }),
             errors=errors,
         )
@@ -107,17 +114,6 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception:
             return False
 
-    async def _test_meal_host(self, meal_host: str) -> bool:
-        try:
-            session = async_get_clientsession(self.hass)
-            async with session.get(
-                f"{meal_host.rstrip('/')}/api/today",
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as resp:
-                return resp.status in (200, 404)
-        except Exception:
-            return False
-
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
@@ -142,47 +138,62 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options={
-                "add_calendar":     "Add a calendar",
-                "edit_calendar":    "Edit a calendar",
-                "remove_calendar":  "Remove a calendar",
-                "update_meal_host": "Update Meal Planner URL",
+                "add_calendar":    "Add a calendar",
+                "edit_calendar":   "Edit a calendar",
+                "remove_calendar": "Remove a calendar",
+                "update_vault":    "Update Vault Credentials",
             },
         )
 
-    # ── Meal Host ─────────────────────────────────────────────────────────────
+    # ── Vault Credentials ─────────────────────────────────────────────────────
 
-    async def async_step_update_meal_host(self, user_input: dict | None = None) -> FlowResult:
-        """Update the meal planner host URL."""
+    async def async_step_update_vault(self, user_input=None) -> FlowResult:
+        """Update Vault credentials. Client ID is read-only — set by install.sh."""
         errors: dict = {}
-        current = self._entry.data.get(CONF_MEAL_HOST, "")
+        env = load_vault_env()
+        data = self._entry.data
+
+        # Client ID always comes from env file — never editable from UI
+        locked_client_id = env.get("VAULT_CLIENT_ID") or data.get(CONF_VAULT_CLIENT_ID, "")
 
         if user_input is not None:
-            meal_host = user_input.get(CONF_MEAL_HOST, "").strip()
-            if meal_host:
-                try:
-                    session = async_get_clientsession(self.hass)
-                    async with session.get(
-                        f"{meal_host.rstrip('/')}/api/today",
-                        timeout=aiohttp.ClientTimeout(total=5)
-                    ) as resp:
-                        if resp.status not in (200, 404):
-                            errors["base"] = "cannot_connect"
-                except Exception:
-                    errors["base"] = "cannot_connect"
-
-            if not errors:
-                # async_create_entry() below changes entry.options, which
-                # already fires the update listener (entry.add_update_listener
-                # in __init__.py) and triggers a reload — no need to also
-                # schedule one explicitly here.
-                return self.async_create_entry(title="", data={**self._entry.options, CONF_MEAL_HOST: meal_host})
+            new_secret = user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip()
+            if new_secret:
+                # Write new secret back to /config/.hades_vault
+                save_vault_secret(new_secret)
+                # Also update config entry so it's in sync
+                self.hass.config_entries.async_update_entry(
+                    self._entry,
+                    data={
+                        **data,
+                        CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
+                        CONF_VAULT_SECRET_NAME:   user_input.get(CONF_VAULT_SECRET_NAME, "").strip(),
+                        CONF_VAULT_CLIENT_SECRET: new_secret,
+                    },
+                )
+            elif user_input.get(CONF_VAULT_URL) or user_input.get(CONF_VAULT_SECRET_NAME):
+                # Allow updating URL/secret name without rotating the secret
+                self.hass.config_entries.async_update_entry(
+                    self._entry,
+                    data={
+                        **data,
+                        CONF_VAULT_URL:         user_input.get(CONF_VAULT_URL, "").strip(),
+                        CONF_VAULT_SECRET_NAME: user_input.get(CONF_VAULT_SECRET_NAME, "").strip(),
+                    },
+                )
+            return self.async_create_entry(title="", data={**self._entry.options})
 
         return self.async_show_form(
-            step_id="update_meal_host",
+            step_id="update_vault",
             data_schema=vol.Schema({
-                vol.Optional(CONF_MEAL_HOST, default=current): str,
+                vol.Optional(CONF_VAULT_URL,           default=env.get("VAULT_URL") or data.get(CONF_VAULT_URL, "http://10.72.16.21:33167")): str,
+                vol.Optional(CONF_VAULT_CLIENT_SECRET, default=""): str,  # never pre-fill
+                vol.Optional(CONF_VAULT_SECRET_NAME,   default=env.get("VAULT_SECRET_NAME") or data.get(CONF_VAULT_SECRET_NAME, "")): str,
             }),
             errors=errors,
+            description_placeholders={
+                "client_id": locked_client_id or "not set — run install.sh first",
+            },
         )
 
     # ── Edit calendar ─────────────────────────────────────────────────────────

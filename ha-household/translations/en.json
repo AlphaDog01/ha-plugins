@@ -2,10 +2,13 @@
   "config": {
     "step": {
       "user": {
-        "title": "Hades Household",
-        "description": "Optionally connect a Meal Planner. You can add calendars next, or skip and add them later.",
+        "title": "Hades Household — Vault Credentials",
+        "description": "Optional. Configure Hades Vault so future modules can fetch short-lived API tokens instead of hardcoded keys. Leave blank to skip — you can set this up later via Configure.",
         "data": {
-          "meal_host": "Meal Planner Host (e.g. http://10.72.16.57:3000)"
+          "vault_url": "Vault URL",
+          "vault_client_id": "Vault Client ID",
+          "vault_client_secret": "Vault Client Secret",
+          "vault_secret_name": "Vault Secret Name"
         }
       },
       "calendars": {
@@ -31,10 +34,10 @@
       "init": {
         "title": "Hades Household — Configure",
         "menu_options": {
-          "add_calendar":      "Add a calendar",
-          "edit_calendar":     "Edit a calendar",
-          "remove_calendar":   "Remove a calendar",
-          "update_meal_host":  "Update Meal Planner URL"
+          "add_calendar":    "Add a calendar",
+          "edit_calendar":   "Edit a calendar",
+          "remove_calendar": "Remove a calendar",
+          "update_vault":    "Update Vault Credentials"
         }
       },
       "edit_calendar": {
@@ -79,15 +82,18 @@
           "calendar_name": "Select calendar to remove"
         }
       },
-      "update_meal_host": {
-        "title": "Update Meal Planner URL",
+      "update_vault": {
+        "title": "Update Vault Credentials",
+        "description": "Client ID: {client_id} (read-only, set by install.sh).",
         "data": {
-          "meal_host": "Meal Planner Host (e.g. http://10.72.16.57:3000)"
+          "vault_url": "Vault URL",
+          "vault_client_secret": "Vault Client Secret",
+          "vault_secret_name": "Vault Secret Name"
         }
       }
     },
     "error": {
-      "cannot_connect": "Could not connect. Check the host and try again.",
+      "cannot_connect": "Could not connect. Check credentials and try again.",
       "invalid_url":    "Could not reach the calendar URL. Check it and try again.",
       "unknown":        "All fields are required."
     }
