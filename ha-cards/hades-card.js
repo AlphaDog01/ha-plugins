@@ -55,7 +55,6 @@ const BASE_STYLES = `
     flex-shrink: 0;
   }
   .person-name { font-size: var(--title); font-weight: 700; color: #fff; }
-  .pts         { font-size: var(--sub); margin-top: 2px; }
 
   .chore-row {
     display: flex; justify-content: space-between;
@@ -63,24 +62,10 @@ const BASE_STYLES = `
     align-items: center;
   }
   .chore-name { font-size: var(--sub); }
-  .chore-pts  { font-size: var(--sub); }
-  .done-name  { text-decoration: line-through; color: #4CAF50; opacity: 0.8; }
-  .done-pts   { color: #4CAF50; }
   .pend-name  { color: rgba(255,255,255,0.85); }
-  .pend-pts   { color: rgba(255,255,255,0.4); }
 
-  .progress-track {
-    background: rgba(255,255,255,0.1);
-    border-radius: 4px; height: 6px; margin-top: 12px;
-  }
-  .progress-fill  { height: 6px; border-radius: 4px; }
   .progress-label { font-size: var(--sub); color: rgba(255,255,255,0.3); margin-top: 4px; }
 
-  .badge {
-    font-size: var(--sub); color: #4CAF50;
-    background: rgba(76,175,80,0.15);
-    border-radius: 20px; padding: 2px 10px; margin-left: 8px;
-  }
   .cal-allday     { font-size: var(--sub); padding: 1px 8px; border-radius: 20px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
   .no-events      { color: rgba(255,255,255,0.3); font-size: var(--sub); padding: 8px 0; }
 `;
@@ -147,11 +132,9 @@ class HadesCard extends HTMLElement {
   }
 
   // ── Person ──────────────────────────────────────────────────────────────────
-  // Reads two native HA helpers, no custom sensor/integration needed:
-  //  - entity:        an input_text holding a JSON array like
-  //                    [{"n":"Empty Trash","s":"p"},{"n":"Feed Cats","s":"c"}]
-  //                    s: "p" pending, "c" complete, "k" skip
-  //  - points_entity:  an input_number holding that person's points total
+  // Reads one native HA helper, no custom sensor/integration needed:
+  //  - entity: an input_text holding a flat JSON array of chore-name strings,
+  //            e.g. ["Empty Trash","Feed Cats"]. No status/points — just names.
 
   _renderPerson() {
     const accent   = this._accent();
@@ -165,34 +148,17 @@ class HadesCard extends HTMLElement {
       if (!Array.isArray(chores)) chores = [];
     }
 
-    const pointsRaw = this._config.points_entity ? this._state(this._config.points_entity)?.state : null;
-    const pts = (pointsRaw != null && pointsRaw !== "unknown" && pointsRaw !== "unavailable")
-      ? (parseFloat(pointsRaw) || 0) : 0;
-
-    const done    = chores.filter(c => c.s === "c");
-    const pending = chores.filter(c => c.s === "p" || !c.s);
-    const skipped = chores.filter(c => c.s === "k");
-    const total   = chores.length;
-    const barPct  = total > 0 ? Math.round((done.length / total) * 100) : 0;
-    const allDone = total > 0 && pending.length === 0;
-    const badge   = allDone ? `<span class="badge">✓ All done!</span>` : "";
-
     let choresHtml = "";
-    done.forEach(c    => { choresHtml += `<div class="chore-row"><span class="chore-name done-name">${c.n}</span></div>`; });
-    pending.forEach(c => { choresHtml += `<div class="chore-row"><span class="chore-name pend-name">${c.n}</span></div>`; });
+    chores.forEach(c => { choresHtml += `<div class="chore-row"><span class="chore-name pend-name">${c}</span></div>`; });
     if (!choresHtml) choresHtml = `<div class="no-events">No chores today</div>`;
 
     return `
       <div style="display:flex;align-items:center;margin-bottom:12px;gap:12px">
         <div class="avatar" style="background:${accent.bg};color:${accent.hex}">${initials}</div>
-        <div>
-          <div class="person-name">${name} ${badge}</div>
-          <div class="pts" style="color:${accent.hex}">★ ${pts} pts</div>
-        </div>
+        <div class="person-name">${name}</div>
       </div>
       ${choresHtml}
-      <div class="progress-track"><div class="progress-fill" style="background:${accent.hex};width:${barPct}%"></div></div>
-      <div class="progress-label">${done.length}/${total}</div>`;
+      <div class="progress-label">${chores.length} chore${chores.length === 1 ? "" : "s"} today</div>`;
   }
 
   // ── Calendar (single source) ────────────────────────────────────────────────
@@ -367,12 +333,6 @@ class HadesCardEditor extends HTMLElement {
       </label>
       <label>Initials (avatar)<br>
         <input type="text" data-key="initials" value="${this._config.initials || ""}">
-      </label>
-      <label>Points Entity (input_number, optional)<br>
-        <select data-key="points_entity">
-          <option value="">-- none --</option>
-          ${this._entityOptions(["input_number."], "points_entity")}
-        </select>
       </label>`;
     if (t === "calendar") return `
       <label>Display Name<br>
