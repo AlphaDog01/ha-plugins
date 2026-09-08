@@ -18,6 +18,13 @@
           "calendar_name": "Calendar Name",
           "calendar_url": "iCal URL (.ics)"
         }
+      },
+      "chores": {
+        "title": "Chores Webhook (Optional)",
+        "description": "Paste a random string (e.g. from `openssl rand -hex 8`) to enable per-person chores sensors, updated by POSTing to /api/webhook/<this value>. Treat it like a password. Leave blank to skip.",
+        "data": {
+          "chores_webhook_id": "Chores Webhook ID"
+        }
       }
     },
     "error": {
@@ -37,7 +44,8 @@
           "add_calendar":    "Add a calendar",
           "edit_calendar":   "Edit a calendar",
           "remove_calendar": "Remove a calendar",
-          "update_vault":    "Update Vault Credentials"
+          "update_vault":    "Update Vault Credentials",
+          "update_chores":   "Update Chores Webhook ID"
         }
       },
       "edit_calendar": {
@@ -89,6 +97,13 @@
           "vault_url": "Vault URL",
           "vault_client_secret": "Vault Client Secret",
           "vault_secret_name": "Vault Secret Name"
+        }
+      },
+      "update_chores": {
+        "title": "Update Chores Webhook ID",
+        "description": "Blank disables the chores feature and removes the webhook.",
+        "data": {
+          "chores_webhook_id": "Chores Webhook ID"
         }
       }
     },

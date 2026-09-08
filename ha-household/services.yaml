@@ -1,318 +1,50 @@
-set_reminder:
-  name: Set Reminder
-  description: Set a reminder for a household member
+set_chores:
+  name: Set Chores
+  description: >
+    Apply one chore action for one person. Builds the exact same payload
+    shape the chores webhook receives and routes it through the same
+    dispatcher — this is a real test of the webhook path, not a separate
+    one. Use action "reset" to clear a person's lists and points back to
+    zero (chore_name/chore_points are ignored for reset).
   fields:
-    person_id:
-      name: Person ID
-      description: The Hades person ID to set the reminder for
+    person:
+      name: Person
+      description: "One of: caleb, courtney, mike, heather, cameron"
       required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    text:
-      name: Reminder Text
-      description: The reminder message
-      required: true
-      example: "Take the cardboard to the road"
-      selector:
-        text:
-
-clear_reminder:
-  name: Clear Reminder
-  description: Clear the active reminder for a household member
-  fields:
-    person_id:
-      name: Person ID
-      description: The Hades person ID to clear the reminder for
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-
-create_chore:
-  name: Create Chore
-  description: Create a new chore definition
-  fields:
-    name:
-      name: Name
-      description: Chore name
-      required: true
-      example: "Take Out Trash"
-      selector:
-        text:
-    description:
-      name: Description
-      description: Optional longer description
-      example: ""
-      selector:
-        text:
-    category:
-      name: Category
-      description: Chore category
-      example: "general"
-      selector:
-        text:
-    assignment_type:
-      name: Assignment Type
-      description: How this chore is assigned
-      example: "fixed"
+      example: "mike"
       selector:
         select:
           options:
-            - "fixed"
-            - "round_robin"
-            - "any"
-    assigned_people:
-      name: Assigned People
-      description: List of person IDs this chore can be assigned to
-      example: [1, 2]
-      selector:
-        object:
-    frequency_type:
-      name: Frequency Type
-      description: How often the chore repeats
-      example: "daily"
+            - "caleb"
+            - "courtney"
+            - "mike"
+            - "heather"
+            - "cameron"
+    action:
+      name: Action
+      description: What to do with this chore.
+      required: true
+      example: "add"
+      default: "add"
       selector:
         select:
           options:
-            - "daily"
-            - "weekly"
-            - "specific_days"
-            - "interval"
-    frequency_interval:
-      name: Frequency Interval
-      description: For interval frequency — repeat every N days
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    frequency_days:
-      name: Frequency Days
-      description: For weekly/specific_days frequency — comma-separated days, 0=Sunday (e.g. "1,3,5")
-      example: "1,3,5"
+            - "add"
+            - "complete"
+            - "skip"
+            - "reset"
+    chore_name:
+      name: Chore Name
+      description: Required unless action is "reset".
+      example: "Feed Cats"
       selector:
         text:
-    due_time:
-      name: Due Time
-      description: Time of day the chore is due
-      example: "20:00:00"
-      selector:
-        time:
-    points:
-      name: Points
-      description: Points awarded on completion
+    chore_points:
+      name: Chore Points
+      description: Points this chore is worth. Added to the running total when action is "complete".
       example: 10
+      default: 0
       selector:
         number:
           min: 0
           mode: box
-    estimated_minutes:
-      name: Estimated Minutes
-      description: Estimated time to complete
-      example: 15
-      selector:
-        number:
-          min: 0
-          mode: box
-
-update_chore:
-  name: Update Chore
-  description: Update fields on an existing chore. Only the fields you set are changed.
-  fields:
-    chore_id:
-      name: Chore ID
-      description: The chore ID to update
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    name:
-      name: Name
-      selector:
-        text:
-    description:
-      name: Description
-      selector:
-        text:
-    category:
-      name: Category
-      selector:
-        text:
-    assignment_type:
-      name: Assignment Type
-      selector:
-        select:
-          options:
-            - "fixed"
-            - "round_robin"
-            - "any"
-    assigned_people:
-      name: Assigned People
-      description: List of person IDs
-      selector:
-        object:
-    frequency_type:
-      name: Frequency Type
-      selector:
-        select:
-          options:
-            - "daily"
-            - "weekly"
-            - "specific_days"
-            - "interval"
-    frequency_interval:
-      name: Frequency Interval
-      selector:
-        number:
-          min: 1
-          mode: box
-    frequency_days:
-      name: Frequency Days
-      description: Comma-separated days, 0=Sunday (e.g. "1,3,5")
-      selector:
-        text:
-    due_time:
-      name: Due Time
-      selector:
-        time:
-    points:
-      name: Points
-      selector:
-        number:
-          min: 0
-          mode: box
-    estimated_minutes:
-      name: Estimated Minutes
-      selector:
-        number:
-          min: 0
-          mode: box
-    active:
-      name: Active
-      description: Whether the chore is active
-      selector:
-        boolean:
-
-complete_chore:
-  name: Complete Chore
-  description: Mark a chore instance as completed and award points
-  fields:
-    instance_id:
-      name: Instance ID
-      description: The chore instance ID to complete
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    person_id:
-      name: Person ID
-      description: Person completing the chore (defaults to the assigned person if omitted)
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-
-adjust_points:
-  name: Adjust Points
-  description: Manually award or deduct points for a household member
-  fields:
-    person_id:
-      name: Person ID
-      description: The Hades person ID
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    points:
-      name: Points
-      description: Points to add (positive) or deduct (negative)
-      required: true
-      example: 10
-      selector:
-        number:
-          mode: box
-    reason:
-      name: Reason
-      description: Reason for the adjustment — shown in the notification
-      required: true
-      example: "Extra help with laundry"
-      selector:
-        text:
-
-create_reward:
-  name: Create Reward
-  description: Create a new redeemable reward
-  fields:
-    name:
-      name: Name
-      description: Reward name
-      required: true
-      example: "Extra Screen Time"
-      selector:
-        text:
-    description:
-      name: Description
-      selector:
-        text:
-    points_required:
-      name: Points Required
-      description: Points needed to redeem this reward
-      required: true
-      example: 50
-      selector:
-        number:
-          min: 0
-          mode: box
-    icon:
-      name: Icon
-      description: Emoji shown on the reward
-      example: "🎁"
-      selector:
-        text:
-
-redeem_reward:
-  name: Redeem Reward
-  description: Redeem a reward for a household member, deducting their points
-  fields:
-    reward_id:
-      name: Reward ID
-      description: The reward ID to redeem
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    person_id:
-      name: Person ID
-      description: The Hades person ID redeeming the reward
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          mode: box
-    person_name:
-      name: Person Name
-      description: Display name used in the redemption notification
-      example: "Caleb"
-      selector:
-        text:
-    reward_name:
-      name: Reward Name
-      description: Display name used in the redemption notification
-      example: "Extra Screen Time"
-      selector:
-        text:
