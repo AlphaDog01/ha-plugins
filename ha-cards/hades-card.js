@@ -14,6 +14,7 @@ const ACCENT_COLORS = {
 };
 
 const CARD_TYPES = {
+  person:            "Person Chores Today",
   calendar:          "Calendar (single source)",
   combined_calendar: "Calendar (all sources)",
 };
@@ -43,6 +44,43 @@ const BASE_STYLES = `
   .cal-time       { font-size: var(--sub); color: rgba(255,255,255,0.4); white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
   .cal-event-name { font-size: var(--sub); color: rgba(255,255,255,0.9); flex: 1; }
   .cal-loc        { font-size: var(--sub); color: rgba(255,255,255,0.35); margin-top: 2px; }
+
+  .avatar {
+    width: calc(var(--title) * 2.2);
+    height: calc(var(--title) * 2.2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    font-size: var(--title);
+    flex-shrink: 0;
+  }
+  .person-name { font-size: var(--title); font-weight: 700; color: #fff; }
+  .pts         { font-size: var(--sub); margin-top: 2px; }
+
+  .chore-row {
+    display: flex; justify-content: space-between;
+    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+    align-items: center;
+  }
+  .chore-name { font-size: var(--sub); }
+  .chore-pts  { font-size: var(--sub); }
+  .done-name  { text-decoration: line-through; color: #4CAF50; opacity: 0.8; }
+  .done-pts   { color: #4CAF50; }
+  .pend-name  { color: rgba(255,255,255,0.85); }
+  .pend-pts   { color: rgba(255,255,255,0.4); }
+
+  .progress-track {
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px; height: 6px; margin-top: 12px;
+  }
+  .progress-fill  { height: 6px; border-radius: 4px; }
+  .progress-label { font-size: var(--sub); color: rgba(255,255,255,0.3); margin-top: 4px; }
+
+  .badge {
+    font-size: var(--sub); color: #4CAF50;
+    background: rgba(76,175,80,0.15);
+    border-radius: 20px; padding: 2px 10px; margin-left: 8px;
+  }
   .cal-allday     { font-size: var(--sub); padding: 1px 8px; border-radius: 20px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
   .no-events      { color: rgba(255,255,255,0.3); font-size: var(--sub); padding: 8px 0; }
 `;
@@ -93,6 +131,7 @@ class HadesCard extends HTMLElement {
     let cardClass = "hades-card";
 
     switch (type) {
+      case "person":             inner = this._renderPerson();           break;
       case "calendar":           inner = this._renderCalendar();         break;
       case "combined_calendar":  inner = this._renderCombinedCalendar(); break;
       default:            inner = `<div class="no-events">Unknown card type: ${type}</div>`;
@@ -105,6 +144,43 @@ class HadesCard extends HTMLElement {
       <style>${BASE_STYLES}</style>
       <div class="${cardClass}" style="${cssVars}">${inner}</div>
     `;
+  }
+
+  // ── Person ──────────────────────────────────────────────────────────────────
+  // Reads a single webhook-driven sensor — no separate rate entity needed.
+  // Expected attributes: pending[], completed[], skipped[], total_chores,
+  // completion_percent, points_total (see the trigger-template sensor setup).
+
+  _renderPerson() {
+    const accent   = this._accent();
+    const name     = this._config.display_name || "Person";
+    const initials = this._config.initials || name[0];
+    const attr     = this._attr(this._config.entity || "");
+    const pts      = attr.points_total ?? 0;
+    const done     = Array.isArray(attr.completed) ? attr.completed : [];
+    const pending  = Array.isArray(attr.pending)   ? attr.pending   : [];
+    const skipped  = Array.isArray(attr.skipped)   ? attr.skipped   : [];
+    const total    = attr.total_chores ?? (done.length + pending.length + skipped.length);
+    const barPct   = attr.completion_percent ?? (total > 0 ? Math.round((done.length / total) * 100) : 0);
+    const allDone  = total > 0 && pending.length === 0;
+    const badge    = allDone ? `<span class="badge">✓ All done!</span>` : "";
+
+    let choresHtml = "";
+    done.forEach(c    => { choresHtml += `<div class="chore-row"><span class="chore-name done-name">${c.name}</span><span class="chore-pts done-pts">+${c.points}</span></div>`; });
+    pending.forEach(c => { choresHtml += `<div class="chore-row"><span class="chore-name pend-name">${c.name}</span><span class="chore-pts pend-pts">+${c.points}</span></div>`; });
+    if (!choresHtml) choresHtml = `<div class="no-events">No chores today</div>`;
+
+    return `
+      <div style="display:flex;align-items:center;margin-bottom:12px;gap:12px">
+        <div class="avatar" style="background:${accent.bg};color:${accent.hex}">${initials}</div>
+        <div>
+          <div class="person-name">${name} ${badge}</div>
+          <div class="pts" style="color:${accent.hex}">★ ${pts} pts</div>
+        </div>
+      </div>
+      ${choresHtml}
+      <div class="progress-track"><div class="progress-fill" style="background:${accent.hex};width:${barPct}%"></div></div>
+      <div class="progress-label">${done.length}/${total}</div>`;
   }
 
   // ── Calendar (single source) ────────────────────────────────────────────────
@@ -266,12 +342,20 @@ class HadesCardEditor extends HTMLElement {
 
   _entityFilter() {
     const t = this._config.card_type;
+    if (t === "person")   return "chores_today";
     if (t === "calendar") return "calendar";
     return "";
   }
 
   _extraFields() {
     const t = this._config.card_type;
+    if (t === "person") return `
+      <label>Display Name<br>
+        <input type="text" data-key="display_name" value="${this._config.display_name || ""}">
+      </label>
+      <label>Initials (avatar)<br>
+        <input type="text" data-key="initials" value="${this._config.initials || ""}">
+      </label>`;
     if (t === "calendar") return `
       <label>Display Name<br>
         <input type="text" data-key="display_name" value="${this._config.display_name || "Today's Events"}">
@@ -412,6 +496,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type:        "hades-card",
   name:        "Hades Card",
-  description: "Household calendars — with live font sizing.",
+  description: "Household chores (per person), calendars — with live font sizing.",
   preview:     true,
 });
