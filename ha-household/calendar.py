@@ -18,6 +18,7 @@ from .const import (
     CALENDAR_TYPE_CALDAV,
     CALENDAR_TYPE_ICAL,
 )
+from .entity_cleanup import async_purge_stale_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,11 @@ async def async_setup_entry(
     entities = []
     for cal in calendars:
         entities.append(HadesCalendarEntity(hass, calendar_coord, cal))
+
+    # Purge any calendar entity left in the registry for a calendar that's
+    # since been removed via Configure > Remove a calendar.
+    valid_unique_ids = {e._attr_unique_id for e in entities if getattr(e, "_attr_unique_id", None)}
+    async_purge_stale_entities(hass, entry, "calendar", valid_unique_ids)
 
     async_add_entities(entities, True)
 

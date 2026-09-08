@@ -1,31 +1,21 @@
-set_chores:
-  name: Set Chores
+set_chore:
+  name: Set Chore
   description: >
-    Apply one chore action for one person. Builds the exact same payload
-    shape the chores webhook receives and routes it through the same
-    dispatcher — this is a real test of the webhook path, not a separate
-    one. Use action "reset" to clear a person's lists and points back to
-    zero (chore_name/chore_points are ignored for reset).
+    Apply one chore action to a targeted person's chores sensor (e.g.
+    sensor.hades_mike_chores_today). Routes through the exact same handler
+    the chores webhook uses. Pick the entity under Targets — no need to
+    type the person's name.
+  target:
+    entity:
+      domain: sensor
+      integration: hades_household
   fields:
-    person:
-      name: Person
-      description: "One of: caleb, courtney, mike, heather, cameron"
-      required: true
-      example: "mike"
-      selector:
-        select:
-          options:
-            - "caleb"
-            - "courtney"
-            - "mike"
-            - "heather"
-            - "cameron"
     action:
       name: Action
       description: What to do with this chore.
       required: true
-      example: "add"
       default: "add"
+      example: "add"
       selector:
         select:
           options:

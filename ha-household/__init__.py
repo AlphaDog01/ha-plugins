@@ -17,11 +17,7 @@ from .const import (
     CONF_CHORES_WEBHOOK_ID,
 )
 from .http import async_register_views
-from .webhook import (
-    async_register_chores_webhook,
-    async_unregister_chores_webhook,
-    async_dispatch_webhook_payload,
-)
+from .webhook import async_register_chores_webhook, async_unregister_chores_webhook
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,27 +59,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 async_unregister_chores_webhook(hass, chores_webhook_id)
             )
         )
-
-    # hades_household.set_chores — builds the exact same payload shape the
-    # webhook receives and routes it through the same dispatcher, so this
-    # is a true test path for the webhook, not a separate code path.
-    async def handle_set_chores(call):
-        payload = {
-            "type":   "chores",
-            "person": call.data["person"],
-            "chore": {
-                "name":   call.data.get("chore_name"),
-                "points": call.data.get("chore_points", 0),
-                "action": call.data.get("action", "add"),
-            } if call.data.get("action", "add") != "reset" else None,
-        }
-        try:
-            await async_dispatch_webhook_payload(hass, payload)
-        except ValueError as err:
-            _LOGGER.error("set_chores failed: %s", err)
-
-    if not hass.services.has_service(DOMAIN, "set_chores"):
-        hass.services.async_register(DOMAIN, "set_chores", handle_set_chores)
 
     return True
 

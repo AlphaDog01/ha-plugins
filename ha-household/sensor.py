@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 
+import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -17,7 +19,12 @@ from .const import (
     CONF_CHORES_WEBHOOK_ID,
     CHORES_PEOPLE,
 )
-from .webhook import chores_data_store, chores_update_signal
+from .webhook import (
+    chores_data_store,
+    chores_update_signal,
+    async_dispatch_webhook_payload,
+)
+from .entity_cleanup import async_purge_stale_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +59,29 @@ async def async_setup_entry(
     if chores_webhook_id:
         for person in CHORES_PEOPLE:
             entities.append(HadesPersonChoresSensor(hass, entry.entry_id, person))
+
+        # Entity-scoped action — this is what makes "Set Chore" selectable in
+        # the Automation editor by TARGETING an entity (e.g. pick
+        # sensor.hades_mike_chores_today under "Targets"), instead of a bare
+        # domain service where you'd have to type the person by hand. Only
+        # HadesPersonChoresSensor entities respond to it; calendar sensors
+        # on this same platform are untouched (they just won't offer it).
+        platform = entity_platform.async_get_current_platform()
+        platform.async_register_entity_service(
+            "set_chore",
+            {
+                vol.Required("action", default="add"): vol.In(["add", "complete", "skip", "reset"]),
+                vol.Optional("chore_name"): cv.string,
+                vol.Optional("chore_points", default=0): vol.Coerce(int),
+            },
+            "async_set_chore",
+        )
+
+    # Purge any sensor entity left in the registry from a past design
+    # (old chores/points/rewards/reminders/leaderboard/meal sensors, etc.)
+    # that the current code no longer creates.
+    valid_unique_ids = {e._attr_unique_id for e in entities if getattr(e, "_attr_unique_id", None)}
+    async_purge_stale_entities(hass, entry, "sensor", valid_unique_ids)
 
     async_add_entities(entities, True)
 
@@ -117,6 +147,11 @@ class HadesPersonChoresSensor(SensorEntity):
     """One person's chores today — full pending/completed/skipped lists,
     written directly from the chores webhook payload. Pushed instantly via
     dispatcher signal when a matching webhook POST arrives; no polling.
+
+    Also exposes the `hades_household.set_chore` entity action (registered
+    in async_setup_entry above), so this entity is directly targetable from
+    the Automation editor's action picker — no need to know its person key,
+    just target the entity.
     """
 
     _attr_should_poll = False
@@ -170,3 +205,16 @@ class HadesPersonChoresSensor(SensorEntity):
     @property
     def device_info(self):
         return _DEVICE_INFO
+
+    async def async_set_chore(self, action: str = "add", chore_name: str | None = None, chore_points: int = 0) -> None:
+        """Handler for the hades_household.set_chore entity action."""
+        payload = {
+            "type":   "chores",
+            "person": self._person,
+            "chore": None if action == "reset" else {
+                "name":   chore_name,
+                "points": chore_points,
+                "action": action,
+            },
+        }
+        await async_dispatch_webhook_payload(self._hass, payload)
