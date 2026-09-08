@@ -11,13 +11,9 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
-    CONF_CHORES_HOST,
-    CONF_CHORES_API_KEY,
-    CONF_TRACKED_PEOPLE,
     CONF_CALENDARS,
     CONF_CALENDAR_NAME,
     CONF_CALENDAR_URL,
@@ -30,36 +26,9 @@ from .const import (
     CALENDAR_TYPE_ICAL,
     CALENDAR_TYPE_CALDAV,
     CALENDAR_COLORS,
-    CONF_VAULT_URL,
-    CONF_VAULT_CLIENT_ID,
-    CONF_VAULT_CLIENT_SECRET,
-    CONF_VAULT_SECRET_CHORES,
-    CONF_VAULT_SECRET_BUDGET,
 )
-from .vault import load_vault_env, save_vault_secret
 
 _LOGGER = logging.getLogger(__name__)
-
-
-async def _fetch_people(hass, host: str, entry_data: dict) -> list[dict]:
-    """Fetch people list from the Hades API."""
-    from .vault import resolve_api_key
-    api_key = await resolve_api_key(
-        hass, entry_data,
-        entry_data.get(CONF_VAULT_SECRET_CHORES, ""),
-        entry_data.get(CONF_CHORES_API_KEY, ""),
-    )
-    session = async_get_clientsession(hass)
-    headers = {}
-    if api_key:
-        headers["X-API-Key"] = api_key
-    url = f"{host.rstrip('/')}/people"
-    async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-        resp.raise_for_status()
-        data = await resp.json()
-        if isinstance(data, dict) and "data" in data:
-            return data["data"]
-        return data
 
 
 class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -69,96 +38,35 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
-        self._people: list[dict] = []
 
     async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
-        """Step 1 — Chores API + Meal Planner connection."""
+        """Step 1 — Meal Planner connection (optional)."""
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
         errors: dict = {}
 
         if user_input is not None:
-            host    = user_input[CONF_CHORES_HOST].rstrip("/")
-            api_key = user_input.get(CONF_CHORES_API_KEY, "")
             meal_host = user_input.get(CONF_MEAL_HOST, "").strip()
-
-            try:
-                entry_data = {
-                    CONF_CHORES_HOST:         host,
-                    CONF_CHORES_API_KEY:      api_key,
-                    CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
-                    CONF_VAULT_CLIENT_ID:     user_input.get(CONF_VAULT_CLIENT_ID, "").strip(),
-                    CONF_VAULT_CLIENT_SECRET: user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip(),
-                    CONF_VAULT_SECRET_CHORES: user_input.get(CONF_VAULT_SECRET_CHORES, "chores-api").strip(),
-                    CONF_VAULT_SECRET_BUDGET: user_input.get(CONF_VAULT_SECRET_BUDGET, "budget-api").strip(),
-                }
-                people = await _fetch_people(self.hass, host, entry_data)
-                if not people:
+            if meal_host:
+                ok = await self._test_meal_host(meal_host)
+                if not ok:
                     errors["base"] = "cannot_connect"
-                else:
-                    self._data.update(entry_data)
-                    self._data[CONF_MEAL_HOST] = meal_host
-                    self._people = people
-                    return await self.async_step_people()
-            except aiohttp.ClientConnectorError:
-                errors["base"] = "cannot_connect"
-            except aiohttp.ClientResponseError as err:
-                if err.status in (401, 403):
-                    errors["base"] = "invalid_auth"
-                else:
-                    errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected error connecting to Hades API")
-                errors["base"] = "unknown"
 
-        # Pre-fill from /config/.hades_vault if it exists
-        env = load_vault_env()
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(CONF_CHORES_HOST,          default="http://10.72.16.117:3010/api/chores"): str,
-                vol.Optional(CONF_VAULT_URL,            default=env.get("VAULT_URL", "http://10.72.16.21:33167")): str,
-                vol.Optional(CONF_VAULT_CLIENT_ID,      default=env.get("VAULT_CLIENT_ID", "")): str,
-                vol.Optional(CONF_VAULT_CLIENT_SECRET,  default=""): str,
-                vol.Optional(CONF_VAULT_SECRET_CHORES,  default=env.get("VAULT_SECRET_CHORES", "chores-api")): str,
-                vol.Optional(CONF_VAULT_SECRET_BUDGET,  default=env.get("VAULT_SECRET_BUDGET", "budget-api")): str,
-                vol.Optional(CONF_CHORES_API_KEY,       default=""): str,
-                vol.Optional(CONF_MEAL_HOST,            default="http://10.72.16.57:3000"): str,
-            }),
-            errors=errors,
-        )
-
-    async def async_step_people(self, user_input: dict | None = None) -> FlowResult:
-        """Step 2 — Select tracked people."""
-        errors: dict = {}
-
-        people_options = {
-            str(p["id"]): p.get("display_name") or p["name"]
-            for p in self._people
-        }
-
-        if user_input is not None:
-            tracked = user_input.get(CONF_TRACKED_PEOPLE, [])
-            if not tracked:
-                errors["base"] = "cannot_connect"
-            else:
-                self._data[CONF_TRACKED_PEOPLE] = tracked
+            if not errors:
+                self._data[CONF_MEAL_HOST] = meal_host
                 return await self.async_step_calendars()
 
         return self.async_show_form(
-            step_id="people",
+            step_id="user",
             data_schema=vol.Schema({
-                vol.Required(
-                    CONF_TRACKED_PEOPLE,
-                    default=list(people_options.keys()),
-                ): cv.multi_select(people_options),
+                vol.Optional(CONF_MEAL_HOST, default="http://10.72.16.57:3000"): str,
             }),
             errors=errors,
         )
 
     async def async_step_calendars(self, user_input: dict | None = None) -> FlowResult:
-        """Step 3 — Optionally add a first calendar."""
+        """Step 2 — Optionally add a first calendar."""
         errors: dict = {}
 
         if user_input is not None:
@@ -199,6 +107,17 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception:
             return False
 
+    async def _test_meal_host(self, meal_host: str) -> bool:
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(
+                f"{meal_host.rstrip('/')}/api/today",
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                return resp.status in (200, 404)
+        except Exception:
+            return False
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
@@ -216,7 +135,6 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                 config_entry.data.get(CONF_CALENDARS, [])
             )
         )
-        self._people_fetched: list[dict] = []
         self._edit_name: str = ""
 
     async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
@@ -224,60 +142,11 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options={
-                "add_calendar":      "Add a calendar",
-                "edit_calendar":     "Edit a calendar",
-                "remove_calendar":   "Remove a calendar",
-                "update_people":     "Update tracked people",
-                "update_chores_host": "Update Chores API Host",
-                "update_meal_host":  "Update Meal Planner URL",
-                "update_vault":      "Update Vault Credentials",
+                "add_calendar":     "Add a calendar",
+                "edit_calendar":    "Edit a calendar",
+                "remove_calendar":  "Remove a calendar",
+                "update_meal_host": "Update Meal Planner URL",
             },
-        )
-
-    # ── Chores API Host ──────────────────────────────────────────────────────
-
-    async def async_step_update_chores_host(self, user_input: dict | None = None) -> FlowResult:
-        """Update the chores API host URL."""
-        errors: dict = {}
-        current = self._entry.data.get(CONF_CHORES_HOST, "")
-
-        if user_input is not None:
-            host = user_input.get(CONF_CHORES_HOST, "").strip().rstrip("/")
-            if host:
-                try:
-                    people = await _fetch_people(self.hass, host, self._entry.data)
-                    if not people:
-                        errors["base"] = "cannot_connect"
-                except aiohttp.ClientConnectorError:
-                    errors["base"] = "cannot_connect"
-                except aiohttp.ClientResponseError as err:
-                    if err.status in (401, 403):
-                        errors["base"] = "invalid_auth"
-                    else:
-                        errors["base"] = "cannot_connect"
-                except Exception:
-                    _LOGGER.exception("Unexpected error connecting to Hades API")
-                    errors["base"] = "unknown"
-            else:
-                errors["base"] = "unknown"
-
-            if not errors:
-                # async_update_entry fires the update listener registered in
-                # __init__.py (entry.add_update_listener), which already
-                # reloads the entry — an explicit async_reload here on top of
-                # that queues a second, redundant reload of this integration.
-                self.hass.config_entries.async_update_entry(
-                    self._entry,
-                    data={**self._entry.data, CONF_CHORES_HOST: host},
-                )
-                return self.async_create_entry(title="", data={**self._entry.options})
-
-        return self.async_show_form(
-            step_id="update_chores_host",
-            data_schema=vol.Schema({
-                vol.Required(CONF_CHORES_HOST, default=current): str,
-            }),
-            errors=errors,
         )
 
     # ── Meal Host ─────────────────────────────────────────────────────────────
@@ -471,95 +340,13 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
             }),
         )
 
-    # ── Update people ─────────────────────────────────────────────────────────
-
-    async def async_step_update_people(self, user_input: dict | None = None) -> FlowResult:
-        errors: dict = {}
-        data = self._entry.data
-
-        if not self._people_fetched:
-            try:
-                self._people_fetched = await _fetch_people(
-                    self.hass,
-                    data[CONF_CHORES_HOST],
-                    data,
-                )
-            except Exception:
-                errors["base"] = "cannot_connect"
-
-        people_options = {
-            str(p["id"]): p.get("display_name") or p["name"]
-            for p in self._people_fetched
-        }
-
-        current = self._entry.options.get(
-            CONF_TRACKED_PEOPLE,
-            data.get(CONF_TRACKED_PEOPLE, list(people_options.keys())),
-        )
-
-        if user_input is not None and not errors:
-            return self._save(tracked=user_input.get(CONF_TRACKED_PEOPLE, current))
-
-        return self.async_show_form(
-            step_id="update_people",
-            data_schema=vol.Schema({
-                vol.Required(CONF_TRACKED_PEOPLE, default=current): cv.multi_select(
-                    people_options
-                ),
-            }),
-            errors=errors,
-        )
-
-    async def async_step_update_vault(self, user_input=None) -> FlowResult:
-        """Update Vault credentials. Client ID is read-only — set by install.sh."""
-        errors: dict = {}
-        env = load_vault_env()
-        data = self._entry.data
-
-        # Client ID always comes from env file — never editable from UI
-        locked_client_id = env.get("VAULT_CLIENT_ID") or data.get(CONF_VAULT_CLIENT_ID, "")
-
-        if user_input is not None:
-            new_secret = user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip()
-            if new_secret:
-                # Write new secret back to /config/.hades_vault
-                save_vault_secret(new_secret)
-                # Also update config entry so it's in sync
-                self.hass.config_entries.async_update_entry(
-                    self._entry,
-                    data={
-                        **data,
-                        CONF_VAULT_URL:           user_input.get(CONF_VAULT_URL, "").strip(),
-                        CONF_VAULT_SECRET_CHORES: user_input.get(CONF_VAULT_SECRET_CHORES, "chores-api").strip(),
-                        CONF_VAULT_SECRET_BUDGET: user_input.get(CONF_VAULT_SECRET_BUDGET, "budget-api").strip(),
-                        CONF_VAULT_CLIENT_SECRET: new_secret,
-                    },
-                )
-            return self.async_create_entry(title="", data={**self._entry.options})
-
-        return self.async_show_form(
-            step_id="update_vault",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_VAULT_URL,           default=env.get("VAULT_URL") or data.get(CONF_VAULT_URL, "http://10.72.16.21:33167")): str,
-                vol.Optional(CONF_VAULT_CLIENT_SECRET, default=""): str,  # never pre-fill
-                vol.Optional(CONF_VAULT_SECRET_CHORES, default=env.get("VAULT_SECRET_CHORES") or data.get(CONF_VAULT_SECRET_CHORES, "chores-api")): str,
-                vol.Optional(CONF_VAULT_SECRET_BUDGET, default=env.get("VAULT_SECRET_BUDGET") or data.get(CONF_VAULT_SECRET_BUDGET, "budget-api")): str,
-            }),
-            errors=errors,
-            description_placeholders={
-                "client_id": locked_client_id or "not set — run install.sh first",
-            },
-        )
-
-    def _save(self, tracked: list | None = None) -> FlowResult:
+    def _save(self) -> FlowResult:
         # async_create_entry()'s `data` REPLACES entry.options wholesale — it
         # does not merge. Start from the existing options so a calendar-only
-        # save (add/edit/remove) doesn't silently drop tracked_people (or any
-        # other option key) that was set on a previous, unrelated save.
+        # save (add/edit/remove) doesn't silently drop any other option key
+        # that was set on a previous, unrelated save.
         data = dict(self._entry.options)
         data[CONF_CALENDARS] = self._calendars
-        if tracked is not None:
-            data[CONF_TRACKED_PEOPLE] = tracked
         return self.async_create_entry(title="", data=data)
 
     async def _test_url(self, url: str) -> bool:

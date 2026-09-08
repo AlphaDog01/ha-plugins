@@ -1,27 +1,21 @@
 # Hades Household Integration
 
-A custom Home Assistant integration that combines chore tracking and calendar management for the household.
+A custom Home Assistant integration for household calendars and meal planning.
 
 ---
 
 ## What It Does
 
-- **Chores** — Connects to the Hades Chore API and exposes sensors for each person's chores today, completion rates, points, and a leaderboard
-- **Calendars** — Fetches any iCal (`.ics`) URL and exposes a single clean sensor with today's events as attributes
+- **Calendars** — Fetches any iCal (`.ics`) URL or CalDAV source and exposes a clean sensor per calendar with today's events as attributes
+- **Meal Planner** — Optionally polls a Meal Planner host for today's meal
 - **Extensible** — Built to easily add new modules (weather, shopping lists, etc.) without restructuring
+
+> Chore tracking, points, rewards, reminders, and budget features have been
+> removed from this integration — that data now lives in a different tool.
 
 ---
 
 ## Sensors
-
-### Chores (per person)
-| Sensor | State | Key Attributes |
-|--------|-------|----------------|
-| `sensor.hades_caleb_chores_today` | # pending | `pending[]`, `completed[]`, `skipped[]`, `total_chores` |
-| `sensor.hades_caleb_completion_rate` | 0-100% | `points_total` |
-| *(same pattern for Cameron, Courtney, Dad, Mom)* | | |
-| `sensor.hades_points_leaderboard` | leader name | `rankings[]` |
-| `sensor.hades_today_summary` | total pending | `total`, `completed`, `pending`, `skipped`, `completion_percent`, `all_done` |
 
 ### Calendars (per calendar you add)
 | Sensor | State | Key Attributes |
@@ -39,6 +33,11 @@ A custom Home Assistant integration that combines chore tracking and calendar ma
 }
 ```
 
+### Meal Planner (optional — only if a meal host is configured)
+| Sensor | State | Key Attributes |
+|--------|-------|----------------|
+| `sensor.hades_meal_today` | Meal title | `photo`, `method` |
+
 ---
 
 ## Installation
@@ -50,7 +49,7 @@ Quick version:
 2. `install.sh household` installs just this plugin to `/config/custom_components/hades_household/`
 3. Restart HA: Settings → System → Restart (a plain integration Reload isn't always enough for new/changed Python files)
 4. Go to Settings → Integrations → Add → search **Hades Household**
-5. Follow the 3-step setup wizard (Chores/Vault connection → tracked people → optional first calendar)
+5. Follow the 2-step setup wizard (optional Meal Planner host → optional first calendar)
 
 ---
 

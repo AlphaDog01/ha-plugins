@@ -14,12 +14,8 @@ const ACCENT_COLORS = {
 };
 
 const CARD_TYPES = {
-  person:            "Person Chores",
-  summary:           "Summary Bar",
-  leaderboard:       "Leaderboard",
   calendar:          "Calendar (single source)",
   combined_calendar: "Calendar (all sources)",
-  stat:              "Generic Stat",
   meal:              "Meal Plan — Today",
 };
 
@@ -39,84 +35,12 @@ const BASE_STYLES = `
     color: #fff;
     box-sizing: border-box;
   }
-  .hades-card.summary { border-radius: 16px; padding: 20px; }
 
   /* ── Title class ── */
   .t  { font-size: var(--title); }
 
   /* ── Subtitle class ── */
   .s  { font-size: var(--sub); }
-
-  .row { display: flex; align-items: center; justify-content: space-between; }
-  .col { display: flex; flex-direction: column; }
-
-  .label {
-    font-size: var(--sub);
-    letter-spacing: 2px; font-weight: 600;
-    margin-bottom: 8px; text-transform: uppercase;
-  }
-  .big-num {
-    font-size: calc(var(--title) * 2.6);
-    font-weight: 700; line-height: 1;
-  }
-  .sub-text {
-    font-size: var(--sub);
-    color: rgba(255,255,255,0.4); margin-top: 6px;
-  }
-  .avatar {
-    width: calc(var(--title) * 2.2);
-    height: calc(var(--title) * 2.2);
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700;
-    font-size: var(--title);
-    flex-shrink: 0;
-  }
-  .person-name { font-size: var(--title); font-weight: 700; color: #fff; }
-  .pts         { font-size: var(--sub); margin-top: 2px; }
-
-  .chore-row {
-    display: flex; justify-content: space-between;
-    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
-    align-items: center;
-  }
-  .chore-name { font-size: var(--sub); }
-  .chore-pts  { font-size: var(--sub); }
-  .done-name  { text-decoration: line-through; color: #4CAF50; opacity: 0.8; }
-  .done-pts   { color: #4CAF50; }
-  .pend-name  { color: rgba(255,255,255,0.85); }
-  .pend-pts   { color: rgba(255,255,255,0.4); }
-  .no-chores  { color: rgba(255,255,255,0.3); font-size: var(--sub); padding: 8px 0; }
-
-  .progress-track {
-    background: rgba(255,255,255,0.1);
-    border-radius: 4px; height: 6px; margin-top: 12px;
-  }
-  .progress-fill  { height: 6px; border-radius: 4px; }
-  .progress-label { font-size: var(--sub); color: rgba(255,255,255,0.3); margin-top: 4px; }
-
-  .badge {
-    font-size: var(--sub); color: #4CAF50;
-    background: rgba(76,175,80,0.15);
-    border-radius: 20px; padding: 2px 10px; margin-left: 8px;
-  }
-
-  .lb-title { font-size: var(--title); font-weight: 700; color: #fff; margin-bottom: 12px; }
-  .lb-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .lb-left { display: flex; align-items: center; gap: 12px; }
-  .lb-medal { font-size: var(--title); width: calc(var(--title) * 1.4); }
-  .lb-avatar {
-    width: calc(var(--title) * 1.6);
-    height: calc(var(--title) * 1.6);
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: var(--sub);
-  }
-  .lb-name { font-size: var(--sub); font-weight: 600; color: #fff; }
-  .lb-pts  { font-size: var(--sub); font-weight: 700; }
 
   .cal-title-bar { font-size: var(--title); font-weight: 700; color: #fff; margin-bottom: 12px; }
   .cal-row {
@@ -128,10 +52,6 @@ const BASE_STYLES = `
   .cal-loc        { font-size: var(--sub); color: rgba(255,255,255,0.35); margin-top: 2px; }
   .cal-allday     { font-size: var(--sub); padding: 1px 8px; border-radius: 20px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
   .no-events      { color: rgba(255,255,255,0.3); font-size: var(--sub); padding: 8px 0; }
-
-  .stat-val  { font-size: calc(var(--title) * 2.1); font-weight: 700; line-height: 1; }
-  .stat-name { font-size: var(--sub); color: rgba(255,255,255,0.5); margin-top: 6px; }
-  .stat-unit { font-size: var(--title); font-weight: 400; margin-left: 4px; }
 
   /* ── Meal Card ── */
   .meal-photo {
@@ -245,14 +165,10 @@ class HadesCard extends HTMLElement {
     let cardClass = "hades-card";
 
     switch (type) {
-      case "person":             inner = this._renderPerson();           break;
-      case "summary":            inner = this._renderSummary();          cardClass += " summary"; break;
-      case "leaderboard":        inner = this._renderLeaderboard();      break;
       case "calendar":           inner = this._renderCalendar();         break;
       case "combined_calendar":  inner = this._renderCombinedCalendar(); break;
-      case "stat":               inner = this._renderStat();             break;
       case "meal":               inner = this._renderMeal();             break;
-      default:            inner = `<div class="no-chores">Unknown card type: ${type}</div>`;
+      default:            inner = `<div class="no-events">Unknown card type: ${type}</div>`;
     }
 
     // Inject CSS vars with px included so var(--title) works directly
@@ -262,78 +178,6 @@ class HadesCard extends HTMLElement {
       <style>${BASE_STYLES}</style>
       <div class="${cardClass}" style="${cssVars}">${inner}</div>
     `;
-  }
-
-  // ── Person ──────────────────────────────────────────────────────────────────
-
-  _renderPerson() {
-    const accent    = this._accent();
-    const name      = this._config.display_name || "Person";
-    const initials  = this._config.initials || name[0];
-    const attr      = this._attr(this._config.entity || "");
-    const rateState = parseFloat(this._state(this._config.rate_entity || "")?.state || 0);
-    const pts       = this._attr(this._config.rate_entity || "")?.points_total || 0;
-    const done      = Array.isArray(attr.completed) ? attr.completed : [];
-    const pending   = Array.isArray(attr.pending)   ? attr.pending   : [];
-    const total     = attr.total_chores || done.length + pending.length;
-    const barPct    = total > 0 ? Math.round((done.length / total) * 100) : 0;
-    const allDone   = rateState === 100;
-    const badge     = allDone ? `<span class="badge">✓ All done!</span>` : "";
-
-    let choresHtml = "";
-    done.forEach(c    => { choresHtml += `<div class="chore-row"><span class="chore-name done-name">${c.name}</span><span class="chore-pts done-pts">+${c.points}</span></div>`; });
-    pending.forEach(c => { choresHtml += `<div class="chore-row"><span class="chore-name pend-name">${c.name}</span><span class="chore-pts pend-pts">+${c.points}</span></div>`; });
-    if (!choresHtml) choresHtml = `<div class="no-chores">No chores today</div>`;
-
-    return `
-      <div class="row" style="margin-bottom:12px;justify-content:flex-start;gap:12px">
-        <div class="avatar" style="background:${accent.bg};color:${accent.hex}">${initials}</div>
-        <div>
-          <div class="person-name">${name} ${badge}</div>
-          <div class="pts" style="color:${accent.hex}">★ ${pts} pts</div>
-        </div>
-      </div>
-      ${choresHtml}
-      <div class="progress-track"><div class="progress-fill" style="background:${accent.hex};width:${barPct}%"></div></div>
-      <div class="progress-label">${done.length}/${total}</div>`;
-  }
-
-  // ── Summary ─────────────────────────────────────────────────────────────────
-
-  _renderSummary() {
-    const accent  = this._accent();
-    const field   = this._config.summary_field || "total";
-    const label   = this._config.label || field.toUpperCase();
-    const attr    = this._attr(this._config.entity || "");
-    const val     = attr[field] ?? this._state(this._config.entity || "")?.state ?? "—";
-    const sub     = this._config.sublabel || `${val} total`;
-    return `
-      <div class="label" style="color:${accent.hex}">${label}</div>
-      <div class="big-num" style="color:${accent.hex}">${val}</div>
-      <div class="sub-text">${sub}</div>`;
-  }
-
-  // ── Leaderboard ─────────────────────────────────────────────────────────────
-
-  _renderLeaderboard() {
-    const rankings = this._attr(this._config.entity || "")?.rankings || [];
-    if (!rankings.length) return `<div class="no-events">No leaderboard data</div>`;
-    const COLORS = { Caleb:"#3B82F6", Cameron:"#F97316", Courtney:"#EC4899", Dad:"#22C55E", Mom:"#A855F7" };
-    const medals = ["🥇","🥈","🥉"];
-    let rows = `<div class="lb-title">Points Leaderboard</div>`;
-    rankings.forEach((p, i) => {
-      const color = COLORS[p.name] || this._accent().hex;
-      rows += `
-        <div class="lb-row">
-          <div class="lb-left">
-            <span class="lb-medal">${medals[i] || `${i+1}.`}</span>
-            <div class="lb-avatar" style="background:${color}22;color:${color}">${p.name[0]}</div>
-            <span class="lb-name">${p.name}</span>
-          </div>
-          <span class="lb-pts" style="color:${color}">${p.points} pts</span>
-        </div>`;
-    });
-    return rows;
   }
 
   // ── Calendar (single source) ────────────────────────────────────────────────
@@ -433,19 +277,6 @@ class HadesCard extends HTMLElement {
           <span style="font-size:var(--sub);background:${color}22;color:${color};border-radius:20px;padding:1px 8px;white-space:nowrap">${calName}</span>
         </div>
       </div>`;
-  }
-
-  // ── Stat ────────────────────────────────────────────────────────────────────
-
-  _renderStat() {
-    const accent   = this._accent();
-    const stateObj = this._state(this._config.entity || "");
-    const val      = stateObj?.state ?? "—";
-    const label    = this._config.label || stateObj?.attributes?.friendly_name || "";
-    return `
-      <div class="label" style="color:${accent.hex}">${label}</div>
-      <div class="stat-val" style="color:${accent.hex}">${val}<span class="stat-unit">${this._config.unit || ""}</span></div>
-      <div class="stat-name">${this._config.sublabel || ""}</div>`;
   }
 
   // ── Meal ─────────────────────────────────────────────────────────────────────
@@ -598,12 +429,6 @@ class HadesCardEditor extends HTMLElement {
     ).join("");
   }
 
-  _rateOptions() {
-    return this._hadesEntities("completion_rate").map(id =>
-      `<option value="${id}" ${this._config.rate_entity === id ? "selected" : ""}>${id}</option>`
-    ).join("");
-  }
-
   _accentSwatches() {
     return Object.entries(ACCENT_COLORS).map(([key, val]) => `
       <div class="swatch ${this._config.accent === key ? "active" : ""}"
@@ -620,51 +445,15 @@ class HadesCardEditor extends HTMLElement {
 
   _entityFilter() {
     const t = this._config.card_type;
-    if (t === "person")      return "chores_today";
-    if (t === "calendar")    return "calendar";
-    if (t === "leaderboard") return "leaderboard";
-    if (t === "summary")     return "summary";
+    if (t === "calendar") return "calendar";
     return "";
   }
 
   _extraFields() {
     const t = this._config.card_type;
-    if (t === "person") return `
-      <label>Rate Entity (completion %)<br>
-        <select data-key="rate_entity">
-          <option value="">-- select --</option>
-          ${this._rateOptions()}
-        </select>
-      </label>
-      <label>Display Name<br>
-        <input type="text" data-key="display_name" value="${this._config.display_name || ""}">
-      </label>
-      <label>Initials (avatar)<br>
-        <input type="text" data-key="initials" value="${this._config.initials || ""}">
-      </label>`;
-    if (t === "summary") return `
-      <label>Summary Field (total / pending / completed)<br>
-        <input type="text" data-key="summary_field" value="${this._config.summary_field || "total"}">
-      </label>
-      <label>Label<br>
-        <input type="text" data-key="label" value="${this._config.label || ""}">
-      </label>
-      <label>Sub-label<br>
-        <input type="text" data-key="sublabel" value="${this._config.sublabel || ""}">
-      </label>`;
     if (t === "calendar") return `
       <label>Display Name<br>
         <input type="text" data-key="display_name" value="${this._config.display_name || "Today's Events"}">
-      </label>`;
-    if (t === "stat") return `
-      <label>Label<br>
-        <input type="text" data-key="label" value="${this._config.label || ""}">
-      </label>
-      <label>Sub-label<br>
-        <input type="text" data-key="sublabel" value="${this._config.sublabel || ""}">
-      </label>
-      <label>Unit<br>
-        <input type="text" data-key="unit" value="${this._config.unit || ""}">
       </label>`;
     return "";
   }
@@ -730,7 +519,7 @@ class HadesCardEditor extends HTMLElement {
         </div>
       </label>
 
-      <label>Subtitle Size (chores, points, details)
+      <label>Subtitle Size (details)
         <div class="size-row">
           <input type="range" data-key="subtitle_size" min="8" max="28" step="1" value="${subSize}">
           <span class="size-val" id="sub-val">${subSize}px</span>
@@ -791,7 +580,7 @@ customElements.define("hades-card-editor", HadesCardEditor);
 
 HadesCard.getConfigElement = () => document.createElement("hades-card-editor");
 HadesCard.getStubConfig = () => ({
-  card_type:     "person",
+  card_type:     "calendar",
   entity:        "",
   accent:        "blue",
   title_size:    DEFAULT_TITLE_SIZE,
@@ -802,6 +591,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type:        "hades-card",
   name:        "Hades Card",
-  description: "Household chores, calendars, leaderboard, and stats — with live font sizing.",
+  description: "Household calendars and meal plan — with live font sizing.",
   preview:     true,
 });

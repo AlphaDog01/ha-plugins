@@ -2,34 +2,22 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta, datetime, date, timezone
-from typing import Any
+from datetime import timedelta, datetime, date
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
-    CONF_CHORES_HOST,
-    CONF_CHORES_API_KEY,
-    CONF_TRACKED_PEOPLE,
     CONF_CALENDARS,
-    CHORES_UPDATE_INTERVAL,
     CALENDAR_UPDATE_INTERVAL,
-    COORDINATOR_CHORES,
     COORDINATOR_CALENDARS,
-    COORDINATOR_REMINDERS,
-    REMINDERS_UPDATE_INTERVAL,
     CONF_MEAL_HOST,
     COORDINATOR_MEALS,
     MEALS_UPDATE_INTERVAL,
-    CONF_VAULT_SECRET_CHORES,
 )
-from .vault import resolve_api_key
-from .http import async_register_views
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,19 +28,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hades Household from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    chores_coordinator = HadesChoresCoordinator(hass, entry)
-    await chores_coordinator.async_config_entry_first_refresh()
-
     calendar_coordinator = HadesCalendarCoordinator(hass, entry)
     await calendar_coordinator.async_config_entry_first_refresh()
 
-    reminders_coordinator = HadesRemindersCoordinator(hass, entry)
-    await reminders_coordinator.async_config_entry_first_refresh()
-
     coordinators = {
-        COORDINATOR_CHORES:    chores_coordinator,
         COORDINATOR_CALENDARS: calendar_coordinator,
-        COORDINATOR_REMINDERS: reminders_coordinator,
     }
 
     # ── Meal coordinator (optional — only if meal_host configured) ────────────
@@ -66,282 +46,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
-    # Register the /api/hades_household/vault_token/{secret_name} view so
-    # browser-side Lovelace cards can request short-lived Vault tokens
-    # without ever seeing the raw client_id/client_secret.
-    if not hass.data[DOMAIN].get("_view_registered"):
-        await async_register_views(hass)
-        hass.data[DOMAIN]["_view_registered"] = True
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
-    async def _base_headers(content_type: bool = False) -> dict:
-        api_key = await resolve_api_key(
-            hass, entry.data,
-            entry.data.get(CONF_VAULT_SECRET_CHORES, ""),
-            entry.data.get(CONF_CHORES_API_KEY, ""),
-        )
-        headers = {}
-        if api_key:
-            headers["x-api-key"] = api_key
-        if content_type:
-            headers["Content-Type"] = "application/json"
-        return headers
-
-    def _host() -> str:
-        return entry.data[CONF_CHORES_HOST].rstrip("/")
-
-    async def _notify(title: str, message: str, notification_id: str) -> None:
-        """Fire a phone notification AND create a persistent notification for audit trail."""
-        # Phone push notification
-        await hass.services.async_call(
-            "notify", "notify",
-            {"title": title, "message": message},
-            blocking=False,
-        )
-        # Persistent notification — shows in Activity log with exact timestamp
-        await hass.services.async_call(
-            "persistent_notification", "create",
-            {
-                "title":           title,
-                "message":         message,
-                "notification_id": notification_id,
-            },
-            blocking=False,
-        )
-        _LOGGER.info("Notification sent [%s]: %s — %s", notification_id, title, message)
-
-    # ── Reminder Services ─────────────────────────────────────────────────────
-
-    async def handle_set_reminder(call):
-        person_id = call.data["person_id"]
-        text      = call.data["text"]
-        session   = async_get_clientsession(hass)
-        try:
-            async with session.post(
-                f"{_host()}/reminders/{person_id}",
-                json={"text": text},
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                _LOGGER.info("Reminder set for person %s: %s", person_id, text)
-        except Exception as err:
-            _LOGGER.error("Failed to set reminder for person %s: %s", person_id, err)
-        await reminders_coordinator.async_refresh()
-
-    async def handle_clear_reminder(call):
-        person_id = call.data["person_id"]
-        session   = async_get_clientsession(hass)
-        try:
-            async with session.delete(
-                f"{_host()}/reminders/{person_id}",
-                headers=await _base_headers(),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                _LOGGER.info("Reminder cleared for person %s", person_id)
-        except Exception as err:
-            _LOGGER.error("Failed to clear reminder for person %s: %s", person_id, err)
-        await reminders_coordinator.async_refresh()
-
-    # ── Chore Services ────────────────────────────────────────────────────────
-
-    async def handle_create_chore(call):
-        payload = {
-            "name":               call.data["name"],
-            "description":        call.data.get("description", ""),
-            "category":           call.data.get("category", "general"),
-            "assignment_type":    call.data.get("assignment_type", "fixed"),
-            "assigned_people":    call.data.get("assigned_people", []),
-            "frequency_type":     call.data.get("frequency_type", "daily"),
-            "frequency_interval": call.data.get("frequency_interval", 1),
-            "frequency_days":     call.data.get("frequency_days", None),
-            "due_time":           call.data.get("due_time", "20:00:00"),
-            "points":             call.data.get("points", 10),
-            "estimated_minutes":  call.data.get("estimated_minutes", 15),
-        }
-        session = async_get_clientsession(hass)
-        try:
-            async with session.post(
-                f"{_host()}/chores",
-                json=payload,
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                result = await resp.json()
-                _LOGGER.info("Chore created: %s", result)
-        except Exception as err:
-            _LOGGER.error("Failed to create chore: %s", err)
-        await chores_coordinator.async_refresh()
-
-    async def handle_update_chore(call):
-        chore_id = call.data["chore_id"]
-        payload  = {}
-        for field in [
-            "name", "description", "category", "assignment_type",
-            "assigned_people", "frequency_type", "frequency_interval",
-            "frequency_days", "due_time", "points", "estimated_minutes", "active",
-        ]:
-            if field in call.data:
-                payload[field] = call.data[field]
-
-        if not payload:
-            _LOGGER.warning("update_chore called with no fields to update")
-            return
-
-        session = async_get_clientsession(hass)
-        try:
-            async with session.put(
-                f"{_host()}/chores/{chore_id}",
-                json=payload,
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                _LOGGER.info("Chore %s updated", chore_id)
-        except Exception as err:
-            _LOGGER.error("Failed to update chore %s: %s", chore_id, err)
-        await chores_coordinator.async_refresh()
-
-    async def handle_complete_chore(call):
-        instance_id = call.data["instance_id"]
-        person_id   = call.data.get("person_id")
-        session     = async_get_clientsession(hass)
-        try:
-            body = {}
-            if person_id:
-                body["completed_by"] = person_id
-            async with session.patch(
-                f"{_host()}/instances/{instance_id}/complete",
-                json=body,
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                result = await resp.json()
-                _LOGGER.info(
-                    "Chore instance %s completed, points awarded: %s",
-                    instance_id, result.get("data", {}).get("points_awarded", "?")
-                )
-        except Exception as err:
-            _LOGGER.error("Failed to complete chore instance %s: %s", instance_id, err)
-        await chores_coordinator.async_refresh()
-
-    # ── Points Services ───────────────────────────────────────────────────────
-
-    async def handle_adjust_points(call):
-        person_id = call.data["person_id"]
-        points    = call.data["points"]
-        reason    = call.data["reason"]
-        session   = async_get_clientsession(hass)
-        try:
-            async with session.post(
-                f"{_host()}/points/adjust",
-                json={"person_id": person_id, "points": points, "reason": reason},
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                result     = await resp.json()
-                new_total  = result.get("new_total", "?")
-                direction  = "awarded" if points > 0 else "deducted"
-                _LOGGER.info(
-                    "Points adjusted for person %s: %s pts — new total: %s",
-                    person_id, points, new_total
-                )
-                # Notify parent of manual point adjustment
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                await _notify(
-                    title   = f"⭐ Points {direction.title()}",
-                    message = f"Person {person_id}: {abs(points)} pts {direction} — {reason} (new total: {new_total})",
-                    notification_id = f"hades_points_{person_id}_{ts}",
-                )
-        except Exception as err:
-            _LOGGER.error("Failed to adjust points for person %s: %s", person_id, err)
-        await chores_coordinator.async_refresh()
-
-    # ── Rewards Services ──────────────────────────────────────────────────────
-
-    async def handle_create_reward(call):
-        payload = {
-            "name":            call.data["name"],
-            "description":     call.data.get("description", ""),
-            "points_required": call.data["points_required"],
-            "icon":            call.data.get("icon", "🎁"),
-        }
-        session = async_get_clientsession(hass)
-        try:
-            async with session.post(
-                f"{_host()}/rewards",
-                json=payload,
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                result = await resp.json()
-                _LOGGER.info("Reward created with id: %s", result.get("id"))
-        except Exception as err:
-            _LOGGER.error("Failed to create reward: %s", err)
-        await chores_coordinator.async_refresh()
-
-    async def handle_redeem_reward(call):
-        reward_id   = call.data["reward_id"]
-        person_id   = call.data["person_id"]
-        person_name = call.data.get("person_name", f"Person {person_id}")
-        reward_name = call.data.get("reward_name", f"Reward {reward_id}")
-        session     = async_get_clientsession(hass)
-        try:
-            async with session.post(
-                f"{_host()}/rewards/{reward_id}/redeem",
-                json={"person_id": person_id},
-                headers=await _base_headers(content_type=True),
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                data = await resp.json()
-                if not data.get("success"):
-                    error = data.get("error", "Unknown error")
-                    _LOGGER.warning("Reward redemption failed: %s", error)
-                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    await _notify(
-                        title           = "⚠️ Reward Redemption Failed",
-                        message         = f"{person_name} tried to redeem '{reward_name}' but failed: {error}",
-                        notification_id = f"hades_redeem_fail_{person_id}_{ts}",
-                    )
-                    return
-
-                points_spent = data.get("points_spent", "?")
-                new_total    = data.get("new_total", "?")
-                _LOGGER.info(
-                    "%s redeemed '%s' for %s pts — new total: %s",
-                    person_name, reward_name, points_spent, new_total
-                )
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                await _notify(
-                    title           = "🎁 Reward Redeemed!",
-                    message         = (
-                        f"{person_name} redeemed: {reward_name} "
-                        f"({points_spent} pts spent, {new_total} pts remaining)"
-                    ),
-                    notification_id = f"hades_redeem_{person_id}_{ts}",
-                )
-
-        except Exception as err:
-            _LOGGER.error("Failed to redeem reward %s for person %s: %s", reward_id, person_id, err)
-        await chores_coordinator.async_refresh()
-
-    # ── Register all services ─────────────────────────────────────────────────
-
-    hass.services.async_register(DOMAIN, "set_reminder",   handle_set_reminder)
-    hass.services.async_register(DOMAIN, "clear_reminder", handle_clear_reminder)
-    hass.services.async_register(DOMAIN, "create_chore",   handle_create_chore)
-    hass.services.async_register(DOMAIN, "update_chore",   handle_update_chore)
-    hass.services.async_register(DOMAIN, "complete_chore", handle_complete_chore)
-    hass.services.async_register(DOMAIN, "adjust_points",  handle_adjust_points)
-    hass.services.async_register(DOMAIN, "create_reward",  handle_create_reward)
-    hass.services.async_register(DOMAIN, "redeem_reward",  handle_redeem_reward)
 
     return True
 
@@ -357,136 +61,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload entry when options change."""
     await hass.config_entries.async_reload(entry.entry_id)
-
-
-# ── Chores Coordinator ────────────────────────────────────────────────────────
-
-class HadesChoresCoordinator(DataUpdateCoordinator):
-    """Coordinator for Hades Chores API."""
-
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        self.host           = entry.data[CONF_CHORES_HOST].rstrip("/")
-        self.api_key        = entry.data.get(CONF_CHORES_API_KEY, "")
-        self.vault_secret   = entry.data.get(CONF_VAULT_SECRET_CHORES, "")
-        self.entry_data     = entry.data
-        self.tracked_people = entry.options.get(
-            CONF_TRACKED_PEOPLE, entry.data.get(CONF_TRACKED_PEOPLE, [])
-        )
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=f"{DOMAIN}_chores",
-            update_interval=timedelta(minutes=CHORES_UPDATE_INTERVAL),
-        )
-
-    async def _fetch(self, path: str) -> Any:
-        """Fetch from Hades API and unwrap {success, data} envelope."""
-        url     = f"{self.host}{path}"
-        api_key = await resolve_api_key(self.hass, self.entry_data, self.vault_secret, self.api_key)
-        headers = {}
-        if api_key:
-            headers["x-api-key"] = api_key
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                resp.raise_for_status()
-                json_data = await resp.json()
-                if isinstance(json_data, dict) and "data" in json_data:
-                    return json_data["data"]
-                return json_data
-
-    async def _async_update_data(self) -> dict:
-        """Fetch all chores data from real API routes."""
-        try:
-            all_instances = await self._fetch("/instances/today")
-            leaderboard   = await self._fetch("/dashboard/leaderboard")
-            all_people    = await self._fetch("/people")
-            all_chores    = await self._fetch("/chores")
-            all_rewards   = await self._fetch("/rewards")
-
-            data: dict = {}
-
-            # Build points and name lookup from /api/people
-            points_lookup: dict = {}
-            name_lookup: dict   = {}
-            if isinstance(all_people, list):
-                for p in all_people:
-                    pid                = str(p["id"])
-                    points_lookup[pid] = p.get("points_total", 0)
-                    name_lookup[pid]   = (p.get("display_name") or p["name"]).lower()
-
-            # Slice instances per tracked person
-            for person_id in self.tracked_people:
-                pid       = str(person_id)
-                completed = []
-                pending   = []
-                skipped   = []
-
-                if isinstance(all_instances, list):
-                    for inst in all_instances:
-                        if str(inst.get("person_id", "")) != pid:
-                            continue
-                        obj = {
-                            "id":           inst.get("id"),
-                            "name":         inst.get("chore_name", ""),
-                            "points":       inst.get("points", 0),
-                            "completed_at": inst.get("completed_at"),
-                        }
-                        status = inst.get("status", "pending")
-                        if status == "completed":
-                            completed.append(obj)
-                        elif status == "skipped":
-                            skipped.append(obj)
-                        else:
-                            pending.append(obj)
-
-                data[pid] = {
-                    "completed":    completed,
-                    "pending":      pending,
-                    "skipped":      skipped,
-                    "points_total": points_lookup.get(pid, 0),
-                    "name":         name_lookup.get(pid, pid),
-                }
-
-            # Summary
-            if isinstance(all_instances, list):
-                total     = len(all_instances)
-                completed = sum(1 for i in all_instances if i.get("status") == "completed")
-                skipped   = sum(1 for i in all_instances if i.get("status") == "skipped")
-                pending   = total - completed - skipped
-                pct       = round((completed / total) * 100) if total > 0 else 0
-                data["summary"] = {
-                    "total":              total,
-                    "completed":          completed,
-                    "pending":            pending,
-                    "skipped":            skipped,
-                    "completion_percent": pct,
-                    "all_done":           pending == 0 and total > 0,
-                }
-            else:
-                data["summary"] = {
-                    "total": 0, "completed": 0, "pending": 0,
-                    "skipped": 0, "completion_percent": 0, "all_done": False,
-                }
-
-            data["leaderboard"] = leaderboard
-            data["chores"]      = all_chores if isinstance(all_chores, list) else []
-            data["rewards"]     = all_rewards if isinstance(all_rewards, list) else []
-
-            # Full people list for management dashboard
-            data["people"] = [
-                {
-                    "id":           p.get("id"),
-                    "name":         p.get("display_name") or p.get("name", ""),
-                    "role":         p.get("role", "child"),
-                    "active":       p.get("active", 1),
-                    "points_total": p.get("points_total", 0),
-                }
-                for p in (all_people if isinstance(all_people, list) else [])
-            ]
-
-            return data
-        except aiohttp.ClientError as err:
-            raise UpdateFailed(f"Chores API error: {err}") from err
 
 
 # ── Calendar Coordinator ──────────────────────────────────────────────────────
@@ -678,55 +252,6 @@ class HadesCalendarCoordinator(DataUpdateCoordinator):
                     "error":       str(err),
                 }
         return result
-
-
-# ── Reminders Coordinator ─────────────────────────────────────────────────────
-
-class HadesRemindersCoordinator(DataUpdateCoordinator):
-    """Coordinator for Hades Reminders API."""
-
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        self.host         = entry.data[CONF_CHORES_HOST].rstrip("/")
-        self.api_key      = entry.data.get(CONF_CHORES_API_KEY, "")
-        self.vault_secret = entry.data.get(CONF_VAULT_SECRET_CHORES, "")
-        self.entry_data   = entry.data
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=f"{DOMAIN}_reminders",
-            update_interval=timedelta(minutes=REMINDERS_UPDATE_INTERVAL),
-        )
-
-    async def _fetch(self, path: str) -> Any:
-        url     = f"{self.host}{path}"
-        api_key = await resolve_api_key(self.hass, self.entry_data, self.vault_secret, self.api_key)
-        headers = {}
-        if api_key:
-            headers["x-api-key"] = api_key
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                resp.raise_for_status()
-                json_data = await resp.json()
-                if isinstance(json_data, dict) and "data" in json_data:
-                    return json_data["data"]
-                return json_data
-
-    async def _async_update_data(self) -> dict:
-        try:
-            reminders = await self._fetch("/reminders")
-            result    = {}
-            if isinstance(reminders, list):
-                for r in reminders:
-                    pid         = str(r["person_id"])
-                    result[pid] = {
-                        "id":          r["id"],
-                        "text":        r["text"],
-                        "created_at":  r.get("created_at"),
-                        "person_name": r.get("display_name") or r.get("person_name", ""),
-                    }
-            return result
-        except aiohttp.ClientError as err:
-            raise UpdateFailed(f"Reminders API error: {err}") from err
 
 
 # ── Meal Coordinator ──────────────────────────────────────────────────────────
