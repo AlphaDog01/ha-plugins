@@ -147,27 +147,39 @@ class HadesCard extends HTMLElement {
   }
 
   // ── Person ──────────────────────────────────────────────────────────────────
-  // Reads a single webhook-driven sensor — no separate rate entity needed.
-  // Expected attributes: pending[], completed[], skipped[], total_chores,
-  // completion_percent, points_total (see the trigger-template sensor setup).
+  // Reads two native HA helpers, no custom sensor/integration needed:
+  //  - entity:        an input_text holding a JSON array like
+  //                    [{"n":"Empty Trash","s":"p"},{"n":"Feed Cats","s":"c"}]
+  //                    s: "p" pending, "c" complete, "k" skip
+  //  - points_entity:  an input_number holding that person's points total
 
   _renderPerson() {
     const accent   = this._accent();
     const name     = this._config.display_name || "Person";
     const initials = this._config.initials || name[0];
-    const attr     = this._attr(this._config.entity || "");
-    const pts      = attr.points_total ?? 0;
-    const done     = Array.isArray(attr.completed) ? attr.completed : [];
-    const pending  = Array.isArray(attr.pending)   ? attr.pending   : [];
-    const skipped  = Array.isArray(attr.skipped)   ? attr.skipped   : [];
-    const total    = attr.total_chores ?? (done.length + pending.length + skipped.length);
-    const barPct   = attr.completion_percent ?? (total > 0 ? Math.round((done.length / total) * 100) : 0);
-    const allDone  = total > 0 && pending.length === 0;
-    const badge    = allDone ? `<span class="badge">✓ All done!</span>` : "";
+
+    const rawState = this._state(this._config.entity || "")?.state;
+    let chores = [];
+    if (rawState && rawState !== "unknown" && rawState !== "unavailable") {
+      try { chores = JSON.parse(rawState); } catch (e) { chores = []; }
+      if (!Array.isArray(chores)) chores = [];
+    }
+
+    const pointsRaw = this._config.points_entity ? this._state(this._config.points_entity)?.state : null;
+    const pts = (pointsRaw != null && pointsRaw !== "unknown" && pointsRaw !== "unavailable")
+      ? (parseFloat(pointsRaw) || 0) : 0;
+
+    const done    = chores.filter(c => c.s === "c");
+    const pending = chores.filter(c => c.s === "p" || !c.s);
+    const skipped = chores.filter(c => c.s === "k");
+    const total   = chores.length;
+    const barPct  = total > 0 ? Math.round((done.length / total) * 100) : 0;
+    const allDone = total > 0 && pending.length === 0;
+    const badge   = allDone ? `<span class="badge">✓ All done!</span>` : "";
 
     let choresHtml = "";
-    done.forEach(c    => { choresHtml += `<div class="chore-row"><span class="chore-name done-name">${c.name}</span><span class="chore-pts done-pts">+${c.points}</span></div>`; });
-    pending.forEach(c => { choresHtml += `<div class="chore-row"><span class="chore-name pend-name">${c.name}</span><span class="chore-pts pend-pts">+${c.points}</span></div>`; });
+    done.forEach(c    => { choresHtml += `<div class="chore-row"><span class="chore-name done-name">${c.n}</span></div>`; });
+    pending.forEach(c => { choresHtml += `<div class="chore-row"><span class="chore-name pend-name">${c.n}</span></div>`; });
     if (!choresHtml) choresHtml = `<div class="no-events">No chores today</div>`;
 
     return `
@@ -312,17 +324,17 @@ class HadesCardEditor extends HTMLElement {
     }));
   }
 
-  _hadesEntities(filter) {
+  _hadesEntities(prefixes) {
     if (!this._hass) return [];
+    const list = Array.isArray(prefixes) ? prefixes : [prefixes];
     return Object.keys(this._hass.states)
-      .filter(id => id.startsWith("sensor.hades") || id.startsWith("calendar.hades"))
-      .filter(id => filter ? id.includes(filter) : true)
+      .filter(id => list.some(p => id.startsWith(p)))
       .sort();
   }
 
-  _entityOptions(filter) {
-    return this._hadesEntities(filter).map(id =>
-      `<option value="${id}" ${this._config.entity === id ? "selected" : ""}>${id}</option>`
+  _entityOptions(prefixes, configKey = "entity") {
+    return this._hadesEntities(prefixes).map(id =>
+      `<option value="${id}" ${this._config[configKey] === id ? "selected" : ""}>${id}</option>`
     ).join("");
   }
 
@@ -342,9 +354,9 @@ class HadesCardEditor extends HTMLElement {
 
   _entityFilter() {
     const t = this._config.card_type;
-    if (t === "person")   return "chores_today";
-    if (t === "calendar") return "calendar";
-    return "";
+    if (t === "person")   return ["input_text."];
+    if (t === "calendar") return ["calendar."];
+    return ["sensor.hades", "calendar.hades"];
   }
 
   _extraFields() {
@@ -355,6 +367,12 @@ class HadesCardEditor extends HTMLElement {
       </label>
       <label>Initials (avatar)<br>
         <input type="text" data-key="initials" value="${this._config.initials || ""}">
+      </label>
+      <label>Points Entity (input_number, optional)<br>
+        <select data-key="points_entity">
+          <option value="">-- none --</option>
+          ${this._entityOptions(["input_number."], "points_entity")}
+        </select>
       </label>`;
     if (t === "calendar") return `
       <label>Display Name<br>
@@ -405,7 +423,7 @@ class HadesCardEditor extends HTMLElement {
         <select data-key="card_type">${this._typeOptions()}</select>
       </label>
 
-      <label>Entity<br>
+      <label>${this._config.card_type === "person" ? "Chores Entity (input_text)" : "Entity"}<br>
         <select data-key="entity">
           <option value="">-- select --</option>
           ${this._entityOptions(this._entityFilter())}

@@ -14,10 +14,8 @@ from .const import (
     CONF_CALENDARS,
     CALENDAR_UPDATE_INTERVAL,
     COORDINATOR_CALENDARS,
-    CONF_CHORES_WEBHOOK_ID,
 )
 from .http import async_register_views
-from .webhook import async_register_chores_webhook, async_unregister_chores_webhook
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +31,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinators = {
         COORDINATOR_CALENDARS: calendar_coordinator,
-        "chores_data": {},
     }
 
     hass.data[DOMAIN][entry.entry_id] = coordinators
@@ -47,18 +44,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data[DOMAIN].get("_view_registered"):
         await async_register_views(hass)
         hass.data[DOMAIN]["_view_registered"] = True
-
-    # Register the chores webhook (optional — only if a webhook ID is set).
-    chores_webhook_id = entry.options.get(
-        CONF_CHORES_WEBHOOK_ID, entry.data.get(CONF_CHORES_WEBHOOK_ID, "")
-    ).strip()
-    if chores_webhook_id:
-        await async_register_chores_webhook(hass, chores_webhook_id)
-        entry.async_on_unload(
-            lambda: hass.async_create_task(
-                async_unregister_chores_webhook(hass, chores_webhook_id)
-            )
-        )
 
     return True
 

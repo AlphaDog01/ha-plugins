@@ -29,7 +29,6 @@ from .const import (
     CONF_VAULT_CLIENT_ID,
     CONF_VAULT_CLIENT_SECRET,
     CONF_VAULT_SECRET_NAME,
-    CONF_CHORES_WEBHOOK_ID,
 )
 from .vault import load_vault_env, save_vault_secret
 
@@ -58,7 +57,7 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_VAULT_CLIENT_SECRET: user_input.get(CONF_VAULT_CLIENT_SECRET, "").strip(),
                 CONF_VAULT_SECRET_NAME:   user_input.get(CONF_VAULT_SECRET_NAME, "").strip(),
             })
-            return await self.async_step_chores()
+            return await self.async_step_calendars()
 
         # Pre-fill from /config/.hades_vault if it exists
         env = load_vault_env()
@@ -69,25 +68,6 @@ class HadesHouseholdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_VAULT_CLIENT_ID,      default=env.get("VAULT_CLIENT_ID", "")): str,
                 vol.Optional(CONF_VAULT_CLIENT_SECRET,  default=""): str,
                 vol.Optional(CONF_VAULT_SECRET_NAME,    default=env.get("VAULT_SECRET_NAME", "")): str,
-            }),
-            errors=errors,
-        )
-
-    async def async_step_chores(self, user_input: dict | None = None) -> FlowResult:
-        """Step 2 — Chores webhook ID (optional). Paste your own random string
-        (e.g. from `openssl rand -hex 8`) — this becomes part of the webhook
-        URL, so treat it like a password. Leave blank to skip the chores
-        feature entirely."""
-        errors: dict = {}
-
-        if user_input is not None:
-            self._data[CONF_CHORES_WEBHOOK_ID] = user_input.get(CONF_CHORES_WEBHOOK_ID, "").strip()
-            return await self.async_step_calendars()
-
-        return self.async_show_form(
-            step_id="chores",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_CHORES_WEBHOOK_ID, default=""): str,
             }),
             errors=errors,
         )
@@ -162,29 +142,7 @@ class HadesHouseholdOptionsFlow(config_entries.OptionsFlow):
                 "edit_calendar":    "Edit a calendar",
                 "remove_calendar":  "Remove a calendar",
                 "update_vault":     "Update Vault Credentials",
-                "update_chores":    "Update Chores Webhook ID",
             },
-        )
-
-    # ── Chores Webhook ────────────────────────────────────────────────────────
-
-    async def async_step_update_chores(self, user_input: dict | None = None) -> FlowResult:
-        """Update (or set/clear) the chores webhook ID."""
-        current = self._entry.data.get(CONF_CHORES_WEBHOOK_ID, "")
-
-        if user_input is not None:
-            webhook_id = user_input.get(CONF_CHORES_WEBHOOK_ID, "").strip()
-            self.hass.config_entries.async_update_entry(
-                self._entry,
-                data={**self._entry.data, CONF_CHORES_WEBHOOK_ID: webhook_id},
-            )
-            return self.async_create_entry(title="", data={**self._entry.options})
-
-        return self.async_show_form(
-            step_id="update_chores",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_CHORES_WEBHOOK_ID, default=current): str,
-            }),
         )
 
     # ── Vault Credentials ─────────────────────────────────────────────────────

@@ -41,11 +41,3 @@ CONF_VAULT_URL           = "vault_url"
 CONF_VAULT_CLIENT_ID     = "vault_client_id"
 CONF_VAULT_CLIENT_SECRET = "vault_client_secret"
 CONF_VAULT_SECRET_NAME   = "vault_secret_name"
-
-# ── Chores (webhook-driven) ──────────────────────────────────────────────────
-# One native HA webhook. POST full payload per person:
-# {"person": "mike", "pending": [...], "completed": [...], "skipped": [...], "points_total": 20}
-# Sensor attributes are written directly from the payload — no template
-# entities, no Jinja, no Automations UI involved.
-CONF_CHORES_WEBHOOK_ID = "chores_webhook_id"
-CHORES_PEOPLE = ["caleb", "courtney", "mike", "heather", "cameron"]
